@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
 
 #[derive(Clone)]
 enum State {
-    Match,
-    Exist,
-    NotExist,
+    Correct,
+    Present,
+    Absent,
+    Unused,
 }
 
 #[derive(Clone)]
@@ -17,6 +20,7 @@ struct Word {
 struct Game {
     round: u8, // maximum 6 rounds
     valid_words: Vec<String>,
+    used_chars: HashMap<char, State>,
     answer: String,
     history: Vec<Word>,
 }
@@ -29,6 +33,7 @@ impl Game {
         Game {
             round: 1,
             valid_words: words,
+            used_chars: HashMap::new(),
             answer,
             history: Vec::new(),
         }
@@ -47,6 +52,10 @@ impl Game {
     }
 
     fn update_screen(&self) {
+        // show previous guesses
+
+        // show keyboard (print A to Z)
+
         todo!();
     }
 
