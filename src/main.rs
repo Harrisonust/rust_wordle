@@ -56,7 +56,15 @@ impl Wordle {
         todo!();
     }
 
+    fn parse_input(&self, input: &str) -> Result<[char; WORD_LEN], String> {
+        todo!();
+    }
+
     fn compare(&self, user_input: &[char; WORD_LEN]) -> Word {
+        todo!();
+    }
+
+    fn update_status(&mut self, result: &Word) {
         todo!();
     }
 
@@ -65,14 +73,6 @@ impl Wordle {
         todo!();
 
         // show keyboard (print A to Z)
-        todo!();
-    }
-
-    fn parse_input(&self, input: &str) -> Result<[char; WORD_LEN], String> {
-        todo!();
-    }
-
-    fn update_status(&mut self, result: &Word) {
         todo!();
     }
 
