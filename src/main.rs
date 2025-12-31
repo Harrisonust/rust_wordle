@@ -18,14 +18,15 @@ struct Word {
 }
 
 impl Word {
-    pub fn new() -> Self {
+    fn new() -> Self {
         todo!();
     }
 
-    pub fn is_solved(&self) -> bool {
+    fn is_solved(&self) -> bool {
         todo!();
     }
 }
+
 struct Wordle {
     round: u8, // maximum 6 rounds
     valid_words: HashSet<String>,
@@ -61,9 +62,9 @@ impl Wordle {
 
     fn update_screen(&self) {
         // show previous guesses
+        todo!();
 
         // show keyboard (print A to Z)
-
         todo!();
     }
 
