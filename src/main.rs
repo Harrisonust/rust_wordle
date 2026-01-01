@@ -6,7 +6,6 @@ use std::io::{self, BufRead, BufReader, Write};
 
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
-const DEFAULT_STR: &str = "APPLE";
 const FILE_PATH: &str = "./words.txt";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -90,7 +89,10 @@ impl Wordle {
             return Err(anyhow!("incorrect word length"));
         }
 
-        if !self.valid_words.contains(trimmed_input) {
+        if !self
+            .valid_words
+            .contains(&trimmed_input.to_ascii_uppercase())
+        {
             return Err(anyhow!("invalid word"));
         }
 
@@ -278,7 +280,70 @@ mod test {
     }
 
     #[test]
-    fn compare_test() {
+    fn compare_test_1() {
+        let mut game = Wordle::new();
+        game.answer = "CRATE".to_string();
+        let w = game.compare(&vec![
+            ('C', State::Default),
+            ('A', State::Default),
+            ('T', State::Default),
+            ('E', State::Default),
+            ('R', State::Default),
+        ]);
+        assert_eq!(
+            w.letters,
+            vec![
+                ('C', State::Correct),
+                ('A', State::Present),
+                ('T', State::Present),
+                ('E', State::Present),
+                ('R', State::Present)
+            ]
+        );
+
+        let mut game = Wordle::new();
+        game.answer = "HOUND".to_string();
+        let w = game.compare(&vec![
+            ('A', State::Default),
+            ('M', State::Default),
+            ('O', State::Default),
+            ('N', State::Default),
+            ('G', State::Default),
+        ]);
+        assert_eq!(
+            w.letters,
+            [
+                ('A', State::Absent),
+                ('M', State::Absent),
+                ('O', State::Present),
+                ('N', State::Correct),
+                ('G', State::Absent)
+            ]
+        );
+
+        let mut game = Wordle::new();
+        game.answer = "TRAIT".to_string();
+        let w = game.compare(&vec![
+            ('T', State::Default),
+            ('X', State::Default),
+            ('T', State::Default),
+            ('X', State::Default),
+            ('T', State::Default),
+        ]);
+        assert_eq!(
+            w.letters,
+            [
+                ('T', State::Correct),
+                ('X', State::Absent),
+                ('T', State::Absent),
+                ('X', State::Absent),
+                ('T', State::Correct)
+            ]
+        );
+    }
+
+    #[test]
+    fn compare_test_2() {
         let mut game = Wordle::new();
         game.answer = "CRATE".to_string();
         let w = game.compare(&vec![
