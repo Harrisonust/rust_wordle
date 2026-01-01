@@ -1,20 +1,26 @@
+use anyhow::{Context, Result, anyhow};
+use rand::seq::IteratorRandom;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::hash::Hash;
+use std::io::{self, BufRead, BufReader, Write};
 
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
+const DEFAULT_STR: &str = "heist";
+const FILE_PATH: &str = "./words.txt";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {
+    Default,
     Correct,
     Present,
     Absent,
-    Unused,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Word {
-    letters: [char; WORD_LEN],
-    states: [State; WORD_LEN],
+    letters: Vec<(char, State)>,
 }
 
 impl Word {
@@ -37,8 +43,16 @@ struct Wordle {
 
 impl Wordle {
     fn new() -> Self {
-        let words = Wordle::load_words();
-        let answer = Wordle::draw_word(&words);
+        let words = match Wordle::load_words() {
+            Ok(val) => val,
+            Err(e) => {
+                eprintln!("{:#}", e);
+                HashSet::new()
+            }
+        };
+
+        let answer = Wordle::draw_word(&words).unwrap_or(String::from(DEFAULT_STR));
+
         Wordle {
             round: 1,
             valid_words: words,
@@ -48,20 +62,92 @@ impl Wordle {
         }
     }
 
-    fn load_words() -> HashSet<String> {
-        todo!();
+    fn load_words() -> Result<HashSet<String>> {
+        let file = File::open(FILE_PATH)?;
+        let reader: BufReader<File> = BufReader::new(file);
+
+        let mut string_set = HashSet::new();
+
+        for line in reader.lines() {
+            let line = line?;
+            string_set.insert(line);
+        }
+
+        Ok(string_set)
     }
 
-    fn draw_word(words: &HashSet<String>) -> String {
-        todo!();
+    fn draw_word(words: &HashSet<String>) -> Option<String> {
+        let mut rng = rand::rng();
+        words.into_iter().choose(&mut rng).cloned()
     }
 
-    fn parse_input(&self, input: &str) -> Result<[char; WORD_LEN], String> {
-        todo!();
+    fn parse_input(&self, input: &str) -> Result<Vec<(char, State)>> {
+        let trimmed_input = input.trim_end();
+
+        if !trimmed_input.is_ascii() {
+            return Err(anyhow!("Not ascii"));
+        }
+
+        if trimmed_input.len() != WORD_LEN {
+            return Err(anyhow!("incorrect word length"));
+        }
+
+        Ok(trimmed_input
+            .chars()
+            .map(|c| (c.to_ascii_lowercase(), State::Default))
+            .collect())
     }
 
-    fn compare(&self, user_input: &[char; WORD_LEN]) -> Word {
-        todo!();
+    fn compare(&self, user_input: &Vec<(char, State)>) -> Word {
+        let mut input_map: HashMap<char, u8> = HashMap::new();
+        let mut answer_map: HashMap<char, u8> = HashMap::new();
+
+        self.answer.chars().for_each(|c| {
+            let count = answer_map.entry(c).or_insert(0);
+            *count += 1;
+        });
+
+        let answer_vec: Vec<char> = self.answer.chars().collect();
+        let mut letters = user_input.clone();
+
+        letters.iter_mut().enumerate().for_each(|(i, (c, state))| {
+            // check correct letters
+            match answer_map.get(c) {
+                Some(_) => {
+                    if answer_vec.get(i).unwrap() == c {
+                        *state = State::Correct;
+                        let count = input_map.entry(*c).or_insert(0);
+                        *count += 1;
+                    }
+                }
+                None => {
+                    *state = State::Absent;
+                }
+            }
+        });
+
+        letters.iter_mut().for_each(|(c, state)| {
+            match *state {
+                State::Default => match answer_map.get(c) {
+                    Some(val) => {
+                        let count = input_map.entry(*c).or_insert(0);
+                        *count += 1;
+
+                        if *count <= *val {
+                            *state = State::Present;
+                        } else {
+                            *state = State::Absent;
+                        }
+                    }
+                    None => {}
+                },
+                _other => {
+                    // ignore other states
+                }
+            }
+        });
+
+        Word { letters }
     }
 
     fn update_status(&mut self, result: &Word) {
@@ -80,22 +166,22 @@ impl Wordle {
         todo!();
     }
 
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<()> {
         while self.round <= ROUND {
             // take user input
-            let user_input = String::new();
+            print!("> ");
+            io::stdout().flush().expect("failed to flush");
+            let mut user_input = String::new();
+            let _ = io::stdin().read_line(&mut user_input);
 
             // parsing
-            let guess = match self.parse_input(&user_input) {
-                Ok(g) => g,
-                Err(e) => {
-                    println!("Error: {e}");
-                    continue; // restart current round
-                }
-            };
+            let guess = self.parse_input(&user_input).expect("parse went wrong");
+            println!("{:?}", guess);
 
             // compare
             let result: Word = self.compare(&guess);
+
+            println!("{:?}", result);
 
             // update game status
             self.update_status(&result);
@@ -115,12 +201,19 @@ impl Wordle {
         } else {
             println!("you lose! answer: '{}'", self.answer);
         }
+
+        Ok(())
     }
 }
 
 fn main() {
     let mut game = Wordle::new();
-    game.run();
+
+    println!("log answer here: {}", game.answer);
+
+    if let Err(e) = game.run() {
+        eprintln!("{:#}", e);
+    }
 }
 
 #[cfg(test)]
