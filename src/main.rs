@@ -7,7 +7,7 @@ use std::io::{self, BufRead, BufReader, Write};
 
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
-const DEFAULT_STR: &str = "heist";
+const DEFAULT_STR: &str = "APPLE";
 const FILE_PATH: &str = "./words.txt";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -85,16 +85,20 @@ impl Wordle {
         let trimmed_input = input.trim_end();
 
         if !trimmed_input.is_ascii() {
-            return Err(anyhow!("Not ascii"));
+            return Err(anyhow!("not ascii"));
         }
 
         if trimmed_input.len() != WORD_LEN {
             return Err(anyhow!("incorrect word length"));
         }
 
+        if !self.valid_words.contains(trimmed_input) {
+            return Err(anyhow!("invalid word"));
+        }
+
         Ok(trimmed_input
             .chars()
-            .map(|c| (c.to_ascii_lowercase(), State::Default))
+            .map(|c| (c.to_ascii_uppercase(), State::Default))
             .collect())
     }
 
@@ -169,13 +173,21 @@ impl Wordle {
     fn run(&mut self) -> Result<()> {
         while self.round <= ROUND {
             // take user input
+            println!("ROUND {}", self.round);
             print!("> ");
             io::stdout().flush().expect("failed to flush");
             let mut user_input = String::new();
             let _ = io::stdin().read_line(&mut user_input);
 
             // parsing
-            let guess = self.parse_input(&user_input).expect("parse went wrong");
+            let guess = match self.parse_input(&user_input) {
+                Ok(val) => val,
+                Err(e) => {
+                    eprintln!("{:#}", e);
+                    continue;
+                }
+            };
+
             println!("{:?}", guess);
 
             // compare
