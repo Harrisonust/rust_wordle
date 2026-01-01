@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use core::panic;
 use rand::seq::IteratorRandom;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -24,7 +25,21 @@ struct Word {
 
 impl Word {
     fn new() -> Self {
-        todo!();
+        Word {
+            letters: Vec::new(),
+        }
+    }
+
+    fn from(word: &str) -> Self {
+        if word.len() != 5 {
+            panic!("word should have length 5");
+        }
+
+        let mut ret = Word::new();
+        for ch in word.chars() {
+            ret.letters.push((ch, State::Absent));
+        }
+        ret
     }
 
     fn is_solved(&self) -> bool {
@@ -290,6 +305,7 @@ mod test {
             ('E', State::Default),
             ('R', State::Default),
         ]);
+        // TODO: change to game.compare(Word::from("CATER"));
         assert_eq!(
             w.letters,
             vec![
