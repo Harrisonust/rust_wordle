@@ -70,7 +70,7 @@ impl Wordle {
 
         for line in reader.lines() {
             let line = line?;
-            string_set.insert(line);
+            string_set.insert(line.to_ascii_uppercase());
         }
 
         Ok(string_set)
