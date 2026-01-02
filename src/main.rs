@@ -139,6 +139,7 @@ impl Wordle {
             }
         }
 
+        // check present letters
         for (c, state) in letters.iter_mut() {
             if *state != State::Default {
                 continue;
@@ -198,12 +199,8 @@ impl Wordle {
                 }
             };
 
-            println!("{:?}", guess);
-
             // compare
             let result: Word = self.compare(&guess);
-
-            println!("{:?}", result);
 
             // update game status
             self.update_status(&result);
