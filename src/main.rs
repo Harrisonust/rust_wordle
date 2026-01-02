@@ -134,7 +134,7 @@ impl Wordle {
         words.into_iter().choose(&mut rng).cloned()
     }
 
-    fn parse_input(&self, input: &str) -> Result<Vec<(char, State)>> {
+    fn parse_input(&self, input: &str) -> Result<Word> {
         let trimmed_input = input.trim_end();
 
         if !trimmed_input.is_ascii() {
@@ -152,13 +152,10 @@ impl Wordle {
             return Err(anyhow!("invalid word"));
         }
 
-        Ok(trimmed_input
-            .chars()
-            .map(|c| (c.to_ascii_uppercase(), State::Default))
-            .collect())
+        Ok(Word::from(&trimmed_input.to_ascii_uppercase()))
     }
 
-    fn compare(&self, user_input: &Vec<(char, State)>) -> Word {
+    fn compare(&self, user_input: &Word) -> Word {
         let mut input_map: HashMap<char, u8> = HashMap::new();
         let mut answer_map: HashMap<char, u8> = HashMap::new();
 
@@ -168,7 +165,7 @@ impl Wordle {
         });
 
         let answer_vec: Vec<char> = self.answer.chars().collect();
-        let mut letters = user_input.clone();
+        let mut letters = user_input.clone().letters;
 
         // check correct letters
         for (i, (c, state)) in letters.iter_mut().enumerate() {
@@ -369,14 +366,7 @@ mod test {
     fn compare_test_1() {
         let mut game = Wordle::new();
         game.answer = "CRATE".to_string();
-        let w = game.compare(&vec![
-            ('C', State::Default),
-            ('A', State::Default),
-            ('T', State::Default),
-            ('E', State::Default),
-            ('R', State::Default),
-        ]);
-        // TODO: change to game.compare(Word::from("CATER"));
+        let w = game.compare(&Word::from("CATER"));
         assert_eq!(
             w.letters,
             vec![
@@ -390,13 +380,7 @@ mod test {
 
         let mut game = Wordle::new();
         game.answer = "HOUND".to_string();
-        let w = game.compare(&vec![
-            ('A', State::Default),
-            ('M', State::Default),
-            ('O', State::Default),
-            ('N', State::Default),
-            ('G', State::Default),
-        ]);
+        let w = game.compare(&Word::from("AMONG"));
         assert_eq!(
             w.letters,
             [
@@ -410,21 +394,15 @@ mod test {
 
         let mut game = Wordle::new();
         game.answer = "TRAIT".to_string();
-        let w = game.compare(&vec![
-            ('T', State::Default),
-            ('X', State::Default),
-            ('T', State::Default),
-            ('X', State::Default),
-            ('T', State::Default),
-        ]);
+        let w = game.compare(&Word::from("TXTXT"));
         assert_eq!(
-            w.letters,
+            w.letters.iter().map(|x| x.1).collect::<Vec<State>>(),
             [
-                ('T', State::Correct),
-                ('X', State::Absent),
-                ('T', State::Absent),
-                ('X', State::Absent),
-                ('T', State::Correct)
+                State::Correct,
+                State::Absent,
+                State::Absent,
+                State::Absent,
+                State::Correct,
             ]
         );
     }
@@ -433,61 +411,43 @@ mod test {
     fn compare_test_2() {
         let mut game = Wordle::new();
         game.answer = "CRATE".to_string();
-        let w = game.compare(&vec![
-            ('C', State::Default),
-            ('A', State::Default),
-            ('T', State::Default),
-            ('E', State::Default),
-            ('R', State::Default),
-        ]);
+        let w = game.compare(&Word::from("CATER"));
         assert_eq!(
-            w.letters,
+            w.letters.iter().map(|x| x.1).collect::<Vec<State>>(),
             vec![
-                ('C', State::Correct),
-                ('A', State::Present),
-                ('T', State::Present),
-                ('E', State::Present),
-                ('R', State::Present)
+                State::Correct,
+                State::Present,
+                State::Present,
+                State::Present,
+                State::Present,
             ]
         );
 
         let mut game = Wordle::new();
         game.answer = "HOUND".to_string();
-        let w = game.compare(&vec![
-            ('A', State::Default),
-            ('M', State::Default),
-            ('O', State::Default),
-            ('N', State::Default),
-            ('G', State::Default),
-        ]);
+        let w = game.compare(&Word::from("AMONG"));
         assert_eq!(
-            w.letters,
+            w.letters.iter().map(|x| x.1).collect::<Vec<State>>(),
             [
-                ('A', State::Absent),
-                ('M', State::Absent),
-                ('O', State::Present),
-                ('N', State::Correct),
-                ('G', State::Absent)
+                State::Absent,
+                State::Absent,
+                State::Present,
+                State::Correct,
+                State::Absent,
             ]
         );
 
         let mut game = Wordle::new();
         game.answer = "TRAIT".to_string();
-        let w = game.compare(&vec![
-            ('T', State::Default),
-            ('X', State::Default),
-            ('T', State::Default),
-            ('T', State::Default),
-            ('X', State::Default),
-        ]);
+        let w = game.compare(&Word::from("TXTTX"));
         assert_eq!(
-            w.letters,
+            w.letters.iter().map(|x| x.1).collect::<Vec<State>>(),
             [
-                ('T', State::Correct),
-                ('X', State::Absent),
-                ('T', State::Present),
-                ('T', State::Absent),
-                ('X', State::Absent)
+                State::Correct,
+                State::Absent,
+                State::Present,
+                State::Absent,
+                State::Absent,
             ]
         );
     }
@@ -496,13 +456,7 @@ mod test {
     fn update_status_test() {
         let mut game = Wordle::new();
         game.answer = "DEALT".to_string();
-        let w = game.compare(&vec![
-            ('A', State::Default),
-            ('S', State::Default),
-            ('I', State::Default),
-            ('D', State::Default),
-            ('E', State::Default),
-        ]);
+        let w = game.compare(&Word::from("ASIDE"));
         game.update_status(&w);
         for (&ch, &state) in &game.used_chars {
             if ch == 'A' || ch == 'D' || ch == 'E' {
@@ -515,13 +469,7 @@ mod test {
         }
         assert!(!game.is_solved());
 
-        let w = game.compare(&vec![
-            ('D', State::Default),
-            ('E', State::Default),
-            ('A', State::Default),
-            ('T', State::Default),
-            ('H', State::Default),
-        ]);
+        let w = game.compare(&Word::from("DEATH"));
         game.update_status(&w);
         for (&ch, &state) in &game.used_chars {
             if ch == 'D' || ch == 'E' || ch == 'A' {
@@ -536,13 +484,7 @@ mod test {
         }
         assert!(!game.is_solved());
 
-        let w = game.compare(&vec![
-            ('D', State::Default),
-            ('E', State::Default),
-            ('A', State::Default),
-            ('L', State::Default),
-            ('T', State::Default),
-        ]);
+        let w = game.compare(&Word::from("DEALT"));
 
         game.update_status(&w);
         for (&ch, &state) in &game.used_chars {
