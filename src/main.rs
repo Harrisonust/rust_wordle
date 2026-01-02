@@ -134,14 +134,12 @@ impl Wordle {
             if answer_vec[i] == *c {
                 *state = State::Correct;
                 *input_map.entry(*c).or_insert(0) += 1;
-            } else if !answer_map.get(c).is_some() {
-                *state = State::Absent;
             }
         }
 
         // check present letters
         for (c, state) in letters.iter_mut() {
-            if *state != State::Default {
+            if *state == State::Correct {
                 continue;
             }
 
