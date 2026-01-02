@@ -1,7 +1,9 @@
 use anyhow::{Result, anyhow};
+use colored::Colorize;
 use core::panic;
 use rand::seq::IteratorRandom;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 
@@ -21,6 +23,29 @@ enum State {
 #[derive(Debug, Clone)]
 struct Word {
     letters: Vec<(char, State)>,
+}
+
+impl fmt::Display for Word {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (c, state) in &self.letters {
+            match *state {
+                State::Correct => {
+                    write!(f, "{}", c.to_string().green())?;
+                }
+                State::Absent => {
+                    write!(f, "{}", c.to_string().blue())?;
+                }
+                State::Present => {
+                    write!(f, "{}", c.to_string().yellow())?;
+                }
+                State::Unused => {
+                    write!(f, "{}", c.to_string().purple())?;
+                }
+                State::Default => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Word {
@@ -43,7 +68,17 @@ impl Word {
     }
 
     fn is_solved(&self) -> bool {
-        todo!();
+        if self.letters.is_empty() {
+            return false;
+        }
+
+        let mut solved: bool = true;
+        for (c, state) in &self.letters {
+            if *state != State::Correct {
+                solved = false;
+            }
+        }
+        solved
     }
 }
 
@@ -53,20 +88,27 @@ struct Wordle {
     used_chars: HashMap<char, State>,
     answer: String,
     history: Vec<Word>,
+    status: bool,
 }
 
 impl Wordle {
     fn new() -> Self {
-        let words = Wordle::load_words().expect("failed to load words");
+        let valid_words = Wordle::load_words().expect("failed to load words");
 
-        let answer = Wordle::draw_word(&words).expect("failed to draw word");
+        let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
+
+        let mut used_chars = HashMap::new();
+        for i in 65u8..=90 {
+            used_chars.entry(i as char).or_insert(State::Unused);
+        }
 
         Wordle {
             round: 1,
-            valid_words: words,
-            used_chars: HashMap::new(),
+            valid_words,
+            used_chars,
             answer,
             history: Vec::new(),
+            status: false,
         }
     }
 
@@ -77,8 +119,7 @@ impl Wordle {
         let mut string_set = HashSet::new();
 
         for line in reader.lines() {
-            let line = line?;
-            string_set.insert(line.to_ascii_uppercase());
+            string_set.insert(line?.to_ascii_uppercase());
         }
 
         Ok(string_set)
@@ -164,19 +205,59 @@ impl Wordle {
     }
 
     fn update_status(&mut self, result: &Word) {
-        todo!();
+        self.history.push(result.clone());
+        let mut solved: bool = true;
+
+        // update keyboard
+        for (c, state) in result.letters.iter() {
+            if *state != State::Correct {
+                solved = false;
+            }
+
+            let used_state = self.used_chars.entry(*c).or_insert(State::Unused);
+
+            if *used_state == State::Unused {
+                *used_state = *state;
+            } else if *used_state == State::Present && *state == State::Correct {
+                *used_state = *state;
+            }
+        }
+
+        // update status
+        self.status = solved;
     }
 
     fn update_screen(&self) {
         // show previous guesses
-        todo!();
+        for word in &self.history {
+            println!("{}", word);
+        }
 
         // show keyboard (print A to Z)
-        todo!();
+        for i in 65u8..=90 {
+            let c = i as char;
+            match self.used_chars[&c] {
+                State::Correct => {
+                    print!("{}", c.to_string().green());
+                }
+                State::Absent => {
+                    print!("{}", c.to_string().blue());
+                }
+                State::Present => {
+                    print!("{}", c.to_string().yellow());
+                }
+                State::Unused => {
+                    print!("{}", c.to_string().purple());
+                }
+                State::Default => {}
+            }
+        }
+        println!("");
+        io::stdout().flush().expect("failed to flush");
     }
 
     fn is_solved(&self) -> bool {
-        todo!();
+        self.status
     }
 
     fn run(&mut self) -> Result<()> {
@@ -239,7 +320,7 @@ mod test {
 
     #[test]
     fn is_solved_test() {
-        let mut w = Word::new();
+        let mut w = Word::from("ARISE");
         assert!(!w.is_solved());
 
         for (_, state) in &mut w.letters {
