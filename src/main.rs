@@ -33,13 +33,13 @@ impl fmt::Display for Word {
                     write!(f, "{}", c.to_string().green())?;
                 }
                 State::Absent => {
-                    write!(f, "{}", c.to_string().blue())?;
+                    write!(f, "{}", c.to_string().white())?;
                 }
                 State::Present => {
                     write!(f, "{}", c.to_string().yellow())?;
                 }
                 State::Unused => {
-                    write!(f, "{}", c.to_string().purple())?;
+                    write!(f, "{}", c.to_string().bright_black())?;
                 }
                 State::Default => {}
             }
@@ -230,24 +230,22 @@ impl Wordle {
             println!("{}", word);
         }
 
-        // show keyboard (print A to Z)
-        for i in 65u8..=90 {
-            let c = i as char;
-            match self.used_chars[&c] {
-                State::Correct => {
-                    print!("{}", c.to_string().green());
-                }
-                State::Absent => {
-                    print!("{}", c.to_string().blue());
-                }
-                State::Present => {
-                    print!("{}", c.to_string().yellow());
-                }
-                State::Unused => {
-                    print!("{}", c.to_string().purple());
-                }
-                State::Default => {}
+        let keyboard_layout = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+        for (row, chars) in keyboard_layout.iter().enumerate() {
+            for _ in 0..row {
+                print!(" ");
             }
+            for ch in chars.to_string().chars() {
+                let state = self.used_chars.get(&ch).unwrap_or(&State::Unused);
+                match state {
+                    State::Correct => print!("{} ", ch.to_string().green()),
+                    State::Present => print!("{} ", ch.to_string().yellow()),
+                    State::Absent => print!("{} ", ch.to_string().white()),
+                    State::Unused => print!("{} ", ch.to_string().bright_black()),
+                    _ => unreachable!(),
+                }
+            }
+            println!()
         }
         println!("");
         io::stdout().flush().expect("failed to flush");
