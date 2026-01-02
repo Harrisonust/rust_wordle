@@ -129,42 +129,37 @@ impl Wordle {
         let answer_vec: Vec<char> = self.answer.chars().collect();
         let mut letters = user_input.clone();
 
-        letters.iter_mut().enumerate().for_each(|(i, (c, state))| {
-            // check correct letters
+        // check correct letters
+        for (i, (c, state)) in letters.iter_mut().enumerate() {
+            if answer_vec[i] == *c {
+                *state = State::Correct;
+                *input_map.entry(*c).or_insert(0) += 1;
+            } else if !answer_map.get(c).is_some() {
+                *state = State::Absent;
+            }
+        }
+
+        for (c, state) in letters.iter_mut() {
+            if *state != State::Default {
+                continue;
+            }
+
             match answer_map.get(c) {
-                Some(_) => {
-                    if answer_vec.get(i).unwrap() == c {
-                        *state = State::Correct;
-                        let count = input_map.entry(*c).or_insert(0);
-                        *count += 1;
+                Some(&val) => {
+                    let count = input_map.entry(*c).or_insert(0);
+                    *count += 1;
+
+                    if *count <= val {
+                        *state = State::Present;
+                    } else {
+                        *state = State::Absent;
                     }
                 }
                 None => {
                     *state = State::Absent;
                 }
             }
-        });
-
-        letters.iter_mut().for_each(|(c, state)| {
-            match *state {
-                State::Default => match answer_map.get(c) {
-                    Some(val) => {
-                        let count = input_map.entry(*c).or_insert(0);
-                        *count += 1;
-
-                        if *count <= *val {
-                            *state = State::Present;
-                        } else {
-                            *state = State::Absent;
-                        }
-                    }
-                    None => {}
-                },
-                _other => {
-                    // ignore other states
-                }
-            }
-        });
+        }
 
         Word { letters }
     }
