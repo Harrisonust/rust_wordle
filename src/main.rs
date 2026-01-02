@@ -137,7 +137,7 @@ impl Wordle {
             }
         }
 
-        // check present letters
+        // check present and absent letters
         for (c, state) in letters.iter_mut() {
             if *state == State::Correct {
                 continue;
