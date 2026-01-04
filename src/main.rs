@@ -13,7 +13,6 @@ const FILE_PATH: &str = "./words.txt";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {
-    Default,
     Correct,
     Present,
     Absent,
@@ -41,7 +40,6 @@ impl fmt::Display for Word {
                 State::Unused => {
                     write!(f, "{}", c.to_string().bright_black())?;
                 }
-                State::Default => {}
             }
         }
         Ok(())
@@ -72,13 +70,12 @@ impl Word {
             return false;
         }
 
-        let mut solved: bool = true;
         for (c, state) in &self.letters {
             if *state != State::Correct {
-                solved = false;
+                return false;
             }
         }
-        solved
+        return true;
     }
 }
 
@@ -98,8 +95,8 @@ impl Wordle {
         let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
 
         let mut used_chars = HashMap::new();
-        for i in 65u8..=90 {
-            used_chars.entry(i as char).or_insert(State::Unused);
+        for i in 'A'..='Z' {
+            used_chars.entry(i).or_insert(State::Unused);
         }
 
         Wordle {
@@ -135,7 +132,7 @@ impl Wordle {
     }
 
     fn parse_input(&self, input: &str) -> Result<Word> {
-        let trimmed_input = input.trim_end();
+        let trimmed_input = input.trim();
 
         if !trimmed_input.is_ascii() {
             return Err(anyhow!("not ascii"));
