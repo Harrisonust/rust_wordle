@@ -315,9 +315,7 @@ impl Wordle {
                         };
                         Span::styled(
                             format!(" {ch} "),
-                            Style::default()
-                                .bg(color)
-                                .add_modifier(Modifier::BOLD),
+                            Style::default().bg(color).add_modifier(Modifier::BOLD),
                         )
                     }
                 })
