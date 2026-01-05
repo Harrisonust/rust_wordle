@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Paragraph, Widget},
+    widgets::{Block, BorderType, Clear, Paragraph, Widget},
 };
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -42,7 +42,7 @@ impl Tile {
     fn get_color(&self) -> Color {
         match self.state {
             State::Correct => Color::Green,
-            State::Present => Color::Yellow,
+            State::Present => Color::LightYellow,
             State::Absent => Color::DarkGray,
             State::Unused => Color::Gray,
         }
@@ -368,6 +368,54 @@ impl Wordle {
         }
         let keyboard = Paragraph::new(lines).alignment(Alignment::Center);
         frame.render_widget(keyboard, keyboard_area);
+
+        if self.solved || self.round == ROUND {
+            let game_result = if self.solved {
+                vec![
+                    Span::styled(
+                        "You won! The answer is: ",
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(Color::Green),
+                    ),
+                    Span::styled(
+                        &self.answer,
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(Color::White),
+                    ),
+                ]
+            } else {
+                vec![
+                    Span::styled(
+                        "You lost! The answer is: ",
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(Color::LightYellow),
+                    ),
+                    Span::styled(
+                        &self.answer,
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(Color::White),
+                    ),
+                ]
+            };
+
+            let popup_block = Block::bordered();
+            let popup_area = frame
+                .area()
+                .centered(Constraint::Length(50), Constraint::Percentage(20));
+            frame.render_widget(Clear, popup_area);
+
+            let popup_text = vec![game_result.into()];
+
+            let popup_para = Paragraph::new(popup_text)
+                .block(popup_block)
+                .alignment(Alignment::Center);
+
+            frame.render_widget(popup_para, popup_area);
+        }
     }
 
     fn run(&mut self) -> Result<()> {
@@ -401,22 +449,12 @@ impl Wordle {
 
                     self.round += 1;
 
-                    if self.solved {
-                        break;
-                    }
-
                     self.current.clear();
                 }
                 InputState::Cancel => break,
             }
         }
         ratatui::restore();
-
-        if self.solved {
-            println!("you got it right! '{}'", self.answer);
-        } else {
-            println!("you lose! answer: '{}'", self.answer);
-        }
 
         Ok(())
     }
