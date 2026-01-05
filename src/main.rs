@@ -27,9 +27,10 @@ enum State {
 }
 
 enum InputState {
-    Default,
     Submit,
     Cancel,
+    GameEnd,
+    None,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -159,23 +160,23 @@ impl Wordle {
         if let Ok(Event::Key(key)) = event::read() {
             match key.code {
                 KeyCode::Esc => return InputState::Cancel,
-                KeyCode::Char(ch) => {
+                KeyCode::Char(ch) if self.round <= 6 => {
                     if self.current.len() < 5 {
                         self.current.push(ch.to_ascii_uppercase());
                     }
                 }
-                KeyCode::Backspace => {
+                KeyCode::Backspace if self.round <= 6 => {
                     if !self.current.is_empty() {
                         self.current.pop();
                     }
                 }
-                KeyCode::Enter => {
+                KeyCode::Enter if self.round <= 6 => {
                     return InputState::Submit;
                 }
-                _ => {}
+                _ => return InputState::GameEnd, // if round >= 6, ignore all input except esc
             }
         }
-        InputState::Default
+        InputState::None
     }
 
     fn parse_input(&self, input: &str) -> Result<Word, String> {
@@ -424,12 +425,7 @@ impl Wordle {
             })?;
 
             match self.handle_input() {
-                InputState::Default => {}
                 InputState::Submit => {
-                    if self.round > 6 {
-                        continue;
-                    }
-
                     // parsing
                     let mut guess = match self.parse_input(&self.current) {
                         Ok(val) => {
@@ -453,6 +449,7 @@ impl Wordle {
                     self.current.clear();
                 }
                 InputState::Cancel => break,
+                InputState::None | InputState::GameEnd => {}
             }
         }
         ratatui::restore();
