@@ -260,16 +260,20 @@ impl Wordle {
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Length(50)])
             .margin(1)
-            .areas(frame.area().centered_horizontally(Constraint::Length(50)));
+            .areas(
+                frame
+                    .area()
+                    .centered(Constraint::Length(50), Constraint::Length(41)),
+            );
 
         let [msg, top, bottom] = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Percentage(5),
-                Constraint::Percentage(60),
-                Constraint::Percentage(35),
+                Constraint::Length(2),
+                Constraint::Length(25),
+                Constraint::Length(8),
             ])
-            .margin(1)
+            .margin(2)
             .areas(outer);
 
         /* border */
@@ -293,7 +297,7 @@ impl Wordle {
         let [game_board_area] = Layout::vertical([Constraint::Fill(1)]).margin(1).areas(top);
 
         if !self.err_msg.is_empty() {
-            let span = Span::styled(self.err_msg.clone(), Style::default().fg(Color::Yellow));
+            let span = Span::styled(self.err_msg.clone(), Style::default().fg(Color::Red));
             frame.render_widget(span, msg);
         }
 
@@ -405,7 +409,7 @@ impl Wordle {
 
             let popup_area = frame
                 .area()
-                .centered(Constraint::Length(40), Constraint::Percentage(20));
+                .centered(Constraint::Length(40), Constraint::Length(3));
             frame.render_widget(Clear, popup_area);
 
             let popup_para = Paragraph::new(vec![game_result.into()])
