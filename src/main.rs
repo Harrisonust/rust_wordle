@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use core::panic;
 use rand::seq::IteratorRandom;
 use ratatui::{
@@ -101,6 +101,7 @@ struct Wordle {
     answer: String,
     history: Vec<Word>,
     solved: bool,
+    err_msg: String,
 }
 
 impl Wordle {
@@ -120,6 +121,7 @@ impl Wordle {
             answer,
             history: Vec::new(),
             solved: false,
+            err_msg: String::new(),
         }
     }
 
@@ -170,22 +172,22 @@ impl Wordle {
         None
     }
 
-    fn parse_input(&self, input: &str) -> Result<Word> {
+    fn parse_input(&self, input: &str) -> Result<Word, String> {
         let trimmed_input = input.trim();
 
         if !trimmed_input.is_ascii() {
-            return Err(anyhow!("not ascii"));
+            return Err(String::from("not ascii"));
         }
 
         if trimmed_input.len() != WORD_LEN {
-            return Err(anyhow!("incorrect word length"));
+            return Err(String::from("incorrect word length"));
         }
 
         if !self
             .valid_words
             .contains(&trimmed_input.to_ascii_uppercase())
         {
-            return Err(anyhow!("invalid word"));
+            return Err(String::from("invalid word"));
         }
 
         Ok(Word::from(&trimmed_input.to_ascii_uppercase()))
@@ -252,9 +254,14 @@ impl Wordle {
             .constraints(vec![Constraint::Length(50)])
             .margin(1)
             .areas(frame.area().centered_horizontally(Constraint::Length(50)));
-        let [top, bottom] = Layout::default()
+
+        let [msg, top, bottom] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Percentage(65), Constraint::Percentage(35)])
+            .constraints(vec![
+                Constraint::Percentage(5),
+                Constraint::Percentage(60),
+                Constraint::Percentage(35),
+            ])
             .margin(1)
             .areas(outer);
 
@@ -269,6 +276,11 @@ impl Wordle {
             .border_type(BorderType::Rounded)
             .render(top, frame.buffer_mut());
         let [game_board_area] = Layout::vertical([Constraint::Fill(1)]).margin(1).areas(top);
+
+        if !self.err_msg.is_empty() {
+            let span = Span::styled(self.err_msg.clone(), Style::default().fg(Color::Yellow));
+            frame.render_widget(span, msg);
+        }
 
         for (row, word) in self.history.iter().enumerate() {
             for (col, tile) in word.letters.iter().enumerate() {
@@ -343,9 +355,12 @@ impl Wordle {
 
             // parsing
             let mut guess = match self.parse_input(&user_input) {
-                Ok(val) => val,
-                Err(e) => {
-                    eprintln!("{:#}", e);
+                Ok(val) => {
+                    self.err_msg = String::from("");
+                    val
+                }
+                Err(err) => {
+                    self.err_msg = err;
                     continue;
                 }
             };
