@@ -26,6 +26,12 @@ enum State {
     Unused,
 }
 
+enum InputState {
+    Default,
+    Submit,
+    Cancel,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Tile {
     letter: char,
@@ -100,6 +106,7 @@ struct Wordle {
     used_chars: HashMap<char, State>,
     answer: String,
     history: Vec<Word>,
+    current: String,
     solved: bool,
     err_msg: String,
 }
@@ -120,6 +127,7 @@ impl Wordle {
             used_chars,
             answer,
             history: Vec::new(),
+            current: String::new(),
             solved: false,
             err_msg: String::new(),
         }
@@ -147,29 +155,27 @@ impl Wordle {
         words.iter().choose(&mut rng).cloned()
     }
 
-    fn handle_input(&self) -> Option<String> {
-        let mut user_input: String = String::new();
-        while let Ok(Event::Key(key)) = event::read() {
+    fn handle_input(&mut self) -> InputState {
+        if let Ok(Event::Key(key)) = event::read() {
             match key.code {
-                KeyCode::Esc => return None,
+                KeyCode::Esc => return InputState::Cancel,
                 KeyCode::Char(ch) => {
-                    if user_input.len() < 5 {
-                        user_input.push(ch.to_ascii_uppercase());
+                    if self.current.len() < 5 {
+                        self.current.push(ch.to_ascii_uppercase());
                     }
                 }
                 KeyCode::Backspace => {
-                    if !user_input.is_empty() {
-                        user_input.pop();
+                    if !self.current.is_empty() {
+                        self.current.pop();
                     }
                 }
                 KeyCode::Enter => {
-                    // parsing
-                    return Some(user_input);
+                    return InputState::Submit;
                 }
                 _ => {}
             }
         }
-        None
+        InputState::Default
     }
 
     fn parse_input(&self, input: &str) -> Result<Word, String> {
@@ -282,11 +288,12 @@ impl Wordle {
             frame.render_widget(span, msg);
         }
 
+        // past guesses
+        let width: u16 = 5;
+        let height: u16 = 3;
+        let center_x = (game_board_area.left() + game_board_area.right()) / 2;
         for (row, word) in self.history.iter().enumerate() {
             for (col, tile) in word.letters.iter().enumerate() {
-                let center_x = (game_board_area.left() + game_board_area.right()) / 2;
-                let width: u16 = 5;
-                let height: u16 = 3;
                 let area = Rect {
                     x: (center_x as i32 - width as i32 / 2
                         + ((col as i32 - 2) * (width + 2) as i32)) as u16,
@@ -296,6 +303,22 @@ impl Wordle {
                 };
                 tile.render(area, frame.buffer_mut());
             }
+        }
+
+        // current guess
+        for (col, ch) in self.current.chars().enumerate() {
+            let area = Rect {
+                x: (center_x as i32 - width as i32 / 2 + ((col as i32 - 2) * (width + 2) as i32))
+                    as u16,
+                y: game_board_area.y + (self.history.len() as i32 * (height + 1) as i32) as u16,
+                width,
+                height,
+            };
+            let tile = Tile {
+                letter: ch,
+                state: State::Absent,
+            };
+            tile.render(area, frame.buffer_mut());
         }
 
         /* keyboard */
@@ -347,34 +370,36 @@ impl Wordle {
                 self.update_screen(frame);
             })?;
 
-            let user_input = if let Some(ret) = self.handle_input() {
-                ret
-            } else {
-                break;
-            };
+            match self.handle_input() {
+                InputState::Default => {}
+                InputState::Submit => {
+                    // parsing
+                    let mut guess = match self.parse_input(&self.current) {
+                        Ok(val) => {
+                            self.err_msg.clear();
+                            val
+                        }
+                        Err(err) => {
+                            self.err_msg = err;
+                            continue;
+                        }
+                    };
 
-            // parsing
-            let mut guess = match self.parse_input(&user_input) {
-                Ok(val) => {
-                    self.err_msg.clear();
-                    val
+                    // compare
+                    self.compare(&mut guess);
+
+                    // update game status
+                    self.update_status(&guess);
+
+                    self.round += 1;
+
+                    if self.solved {
+                        break;
+                    }
+
+                    self.current.clear();
                 }
-                Err(err) => {
-                    self.err_msg = err;
-                    continue;
-                }
-            };
-
-            // compare
-            self.compare(&mut guess);
-
-            // update game status
-            self.update_status(&guess);
-
-            self.round += 1;
-
-            if self.solved {
-                break;
+                InputState::Cancel => break,
             }
         }
         ratatui::restore();
