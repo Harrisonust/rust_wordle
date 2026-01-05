@@ -1,11 +1,18 @@
 use anyhow::{Result, anyhow};
-use colored::Colorize;
 use core::panic;
 use rand::seq::IteratorRandom;
+use ratatui::{
+    Frame,
+    buffer::Buffer,
+    crossterm::event::{self, Event, KeyCode},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Paragraph, Widget},
+};
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
@@ -19,31 +26,36 @@ enum State {
     Unused,
 }
 
-#[derive(Debug, Clone)]
-struct Word {
-    letters: Vec<(char, State)>,
+#[derive(Debug, Clone, Copy)]
+struct Tile {
+    letter: char,
+    state: State,
 }
 
-impl fmt::Display for Word {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (c, state) in &self.letters {
-            match *state {
-                State::Correct => {
-                    write!(f, "{}", c.to_string().green())?;
-                }
-                State::Absent => {
-                    write!(f, "{}", c.to_string().white())?;
-                }
-                State::Present => {
-                    write!(f, "{}", c.to_string().yellow())?;
-                }
-                State::Unused => {
-                    write!(f, "{}", c.to_string().bright_black())?;
-                }
-            }
+impl Tile {
+    fn get_color(&self) -> Color {
+        match self.state {
+            State::Correct => Color::Green,
+            State::Present => Color::Yellow,
+            State::Absent => Color::DarkGray,
+            State::Unused => Color::Gray,
         }
-        Ok(())
     }
+}
+
+impl Widget for Tile {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        Block::new().bg(self.get_color()).render(area, buf);
+        Paragraph::new(format!("{}", self.letter)).render(
+            area.centered(Constraint::Length(1), Constraint::Length(1)),
+            buf,
+        );
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Word {
+    letters: Vec<Tile>,
 }
 
 impl Word {
@@ -59,8 +71,11 @@ impl Word {
         }
 
         let mut ret = Word::new();
-        for ch in word.chars() {
-            ret.letters.push((ch, State::Absent));
+        for letter in word.chars() {
+            ret.letters.push(Tile {
+                letter,
+                state: State::Absent,
+            });
         }
         ret
     }
@@ -70,8 +85,8 @@ impl Word {
             return false;
         }
 
-        for (_, state) in &self.letters {
-            if *state != State::Correct {
+        for tile in &self.letters {
+            if tile.state != State::Correct {
                 return false;
             }
         }
@@ -130,6 +145,31 @@ impl Wordle {
         words.iter().choose(&mut rng).cloned()
     }
 
+    fn handle_input(&self) -> Option<String> {
+        let mut user_input: String = String::new();
+        while let Ok(Event::Key(key)) = event::read() {
+            match key.code {
+                KeyCode::Esc => return None,
+                KeyCode::Char(ch) => {
+                    if user_input.len() < 5 {
+                        user_input.push(ch.to_ascii_uppercase());
+                    }
+                }
+                KeyCode::Backspace => {
+                    if !user_input.is_empty() {
+                        user_input.pop();
+                    }
+                }
+                KeyCode::Enter => {
+                    // parsing
+                    return Some(user_input);
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
     fn parse_input(&self, input: &str) -> Result<Word> {
         let trimmed_input = input.trim();
 
@@ -159,27 +199,27 @@ impl Wordle {
 
         // check correct letters
         let answer_vec: Vec<char> = self.answer.chars().collect();
-        for (i, (c, state)) in user_input.letters.iter_mut().enumerate() {
-            if answer_vec[i] == *c {
-                *state = State::Correct;
-                if let Some(val) = answer_map.get_mut(c) {
+        for (i, tile) in user_input.letters.iter_mut().enumerate() {
+            if answer_vec[i] == tile.letter {
+                tile.state = State::Correct;
+                if let Some(val) = answer_map.get_mut(&tile.letter) {
                     *val -= 1;
                 }
             }
         }
 
         // check present and absent letters
-        for (c, state) in user_input.letters.iter_mut() {
-            if *state == State::Correct {
+        for tile in user_input.letters.iter_mut() {
+            if tile.state == State::Correct {
                 continue;
             }
 
-            match answer_map.get_mut(c) {
+            match answer_map.get_mut(&tile.letter) {
                 Some(val) if *val > 0 => {
-                    *state = State::Present;
+                    tile.state = State::Present;
                     *val -= 1;
                 }
-                _ => *state = State::Absent,
+                _ => tile.state = State::Absent,
             }
         }
     }
@@ -189,16 +229,16 @@ impl Wordle {
         let mut solved: bool = true;
 
         // update keyboard
-        for (c, state) in result.letters.iter() {
-            if *state != State::Correct {
+        for tile in result.letters.iter() {
+            if tile.state != State::Correct {
                 solved = false;
             }
 
-            let used_state = self.used_chars.entry(*c).or_insert(State::Unused);
+            let used_state = self.used_chars.entry(tile.letter).or_insert(State::Unused);
             if *used_state == State::Unused
-                || (*used_state == State::Present && *state == State::Correct)
+                || (*used_state == State::Present && tile.state == State::Correct)
             {
-                *used_state = *state;
+                *used_state = tile.state;
             }
         }
 
@@ -206,41 +246,102 @@ impl Wordle {
         self.solved = solved;
     }
 
-    fn update_screen(&self) {
-        // show previous guesses
-        for word in &self.history {
-            println!("{}", word);
+    fn update_screen(&self, frame: &mut Frame) {
+        let [outer] = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Length(50)])
+            .margin(1)
+            .areas(frame.area().centered_horizontally(Constraint::Length(50)));
+        let [top, bottom] = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Percentage(65), Constraint::Percentage(35)])
+            .margin(1)
+            .areas(outer);
+
+        /* border */
+        Block::bordered()
+            .title("Wordle")
+            .border_type(BorderType::Rounded)
+            .render(outer, frame.buffer_mut());
+
+        /* game board */
+        Block::bordered()
+            .border_type(BorderType::Rounded)
+            .render(top, frame.buffer_mut());
+        let [game_board_area] = Layout::vertical([Constraint::Fill(1)]).margin(1).areas(top);
+
+        for (row, word) in self.history.iter().enumerate() {
+            for (col, tile) in word.letters.iter().enumerate() {
+                let center_x = (game_board_area.left() + game_board_area.right()) / 2;
+                let width: u16 = 5;
+                let height: u16 = 3;
+                let area = Rect {
+                    x: (center_x as i32 - width as i32 / 2
+                        + ((col as i32 - 2) * (width + 2) as i32)) as u16,
+                    y: game_board_area.y + (row as i32 * (height + 1) as i32) as u16,
+                    width,
+                    height,
+                };
+                tile.render(area, frame.buffer_mut());
+            }
         }
 
-        let keyboard_layout = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
-        for (row, chars) in keyboard_layout.iter().enumerate() {
-            for _ in 0..row {
-                print!(" ");
-            }
-            for ch in chars.to_string().chars() {
-                let state = self.used_chars.get(&ch).unwrap_or(&State::Unused);
-                match state {
-                    State::Correct => print!("{} ", ch.to_string().green()),
-                    State::Present => print!("{} ", ch.to_string().yellow()),
-                    State::Absent => print!("{} ", ch.to_string().white()),
-                    State::Unused => print!("{} ", ch.to_string().bright_black()),
-                }
-            }
-            println!()
+        /* keyboard */
+        let qwerty = [
+            "Q W E R T Y U I O P",
+            " A S D F G H J K L ",
+            "  Z X C V B N M    ",
+        ];
+        Block::bordered()
+            .border_type(BorderType::Rounded)
+            .render(bottom, frame.buffer_mut());
+        let [keyboard_area] = Layout::vertical([Constraint::Fill(1)])
+            .margin(1)
+            .areas(bottom);
+        let mut lines = Vec::new();
+        for row in qwerty {
+            let spans = row
+                .chars()
+                .map(|ch| {
+                    if ch == ' ' {
+                        Span::raw(" ")
+                    } else {
+                        let color = match self.used_chars.get(&ch) {
+                            Some(State::Correct) => Color::Green,
+                            Some(State::Present) => Color::Yellow,
+                            Some(State::Absent) => Color::Gray,
+                            Some(State::Unused) => Color::DarkGray,
+                            _ => Color::DarkGray,
+                        };
+                        Span::styled(
+                            format!(" {ch} "),
+                            Style::default()
+                                .bg(color)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                    }
+                })
+                .collect();
+            lines.push(spans);
+            lines.push(Line::from(vec![Span::default()]));
         }
-        println!();
-        io::stdout().flush().expect("failed to flush");
+        let keyboard = Paragraph::new(lines).alignment(Alignment::Center);
+        frame.render_widget(keyboard, keyboard_area);
     }
 
     fn run(&mut self) -> Result<()> {
-        while self.round <= ROUND {
-            println!("ROUND {}", self.round);
-            print!("> ");
+        let mut terminal = ratatui::init();
 
-            // take user input
-            io::stdout().flush().expect("failed to flush");
-            let mut user_input = String::new();
-            io::stdin().read_line(&mut user_input)?;
+        while self.round <= ROUND {
+            terminal.draw(|frame| {
+                self.update_screen(frame);
+            })?;
+
+            let user_input = if let Some(ret) = self.handle_input() {
+                ret
+            } else {
+                break;
+            };
 
             // parsing
             let mut guess = match self.parse_input(&user_input) {
@@ -257,15 +358,13 @@ impl Wordle {
             // update game status
             self.update_status(&guess);
 
-            // update screen
-            self.update_screen();
-
             self.round += 1;
 
             if self.solved {
                 break;
             }
         }
+        ratatui::restore();
 
         if self.solved {
             println!("you got it right! '{}'", self.answer);
@@ -296,14 +395,14 @@ mod test {
         let mut w = Word::from("ARISE");
         assert!(!w.is_solved());
 
-        for (_, state) in &mut w.letters {
-            *state = State::Correct;
+        for tile in &mut w.letters {
+            tile.state = State::Correct;
         }
-        w.letters[3].1 = State::Present;
+        w.letters[3].state = State::Present;
         assert!(!w.is_solved());
 
-        for (_, state) in &mut w.letters {
-            *state = State::Correct;
+        for tile in &mut w.letters {
+            tile.state = State::Correct;
         }
         assert!(w.is_solved());
     }
@@ -348,7 +447,7 @@ mod test {
             guess
                 .letters
                 .into_iter()
-                .map(|(_, state)| state)
+                .map(|tile| tile.state)
                 .collect::<Vec<State>>(),
             vec![
                 State::Correct,
@@ -367,7 +466,7 @@ mod test {
             guess
                 .letters
                 .into_iter()
-                .map(|(_, state)| state)
+                .map(|tile| tile.state)
                 .collect::<Vec<State>>(),
             [
                 State::Absent,
@@ -386,7 +485,7 @@ mod test {
             guess
                 .letters
                 .into_iter()
-                .map(|(_, state)| state)
+                .map(|tile| tile.state)
                 .collect::<Vec<State>>(),
             [
                 State::Correct,
@@ -405,7 +504,7 @@ mod test {
             guess
                 .letters
                 .into_iter()
-                .map(|(_, state)| state)
+                .map(|tile| tile.state)
                 .collect::<Vec<State>>(),
             [
                 State::Correct,
