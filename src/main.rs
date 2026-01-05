@@ -321,9 +321,9 @@ impl Wordle {
                         let color = match self.used_chars.get(&ch) {
                             Some(State::Correct) => Color::Green,
                             Some(State::Present) => Color::Yellow,
-                            Some(State::Absent) => Color::Gray,
-                            Some(State::Unused) => Color::DarkGray,
-                            _ => Color::DarkGray,
+                            Some(State::Absent) => Color::DarkGray,
+                            Some(State::Unused) => Color::Black,
+                            _ => unreachable!(),
                         };
                         Span::styled(
                             format!(" {ch} "),
@@ -356,7 +356,7 @@ impl Wordle {
             // parsing
             let mut guess = match self.parse_input(&user_input) {
                 Ok(val) => {
-                    self.err_msg = String::from("");
+                    self.err_msg.clear();
                     val
                 }
                 Err(err) => {
