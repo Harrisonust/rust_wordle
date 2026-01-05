@@ -1,7 +1,15 @@
+use anyhow::{Result, anyhow};
+use colored::Colorize;
+use core::panic;
+use rand::seq::IteratorRandom;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Write};
 
 const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
+const FILE_PATH: &str = "./words.txt";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {
@@ -11,19 +19,63 @@ enum State {
     Unused,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Word {
-    letters: [char; WORD_LEN],
-    states: [State; WORD_LEN],
+    letters: Vec<(char, State)>,
+}
+
+impl fmt::Display for Word {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (c, state) in &self.letters {
+            match *state {
+                State::Correct => {
+                    write!(f, "{}", c.to_string().green())?;
+                }
+                State::Absent => {
+                    write!(f, "{}", c.to_string().white())?;
+                }
+                State::Present => {
+                    write!(f, "{}", c.to_string().yellow())?;
+                }
+                State::Unused => {
+                    write!(f, "{}", c.to_string().bright_black())?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Word {
     fn new() -> Self {
-        todo!();
+        Word {
+            letters: Vec::new(),
+        }
+    }
+
+    fn from(word: &str) -> Self {
+        if word.len() != 5 {
+            panic!("word should have length 5");
+        }
+
+        let mut ret = Word::new();
+        for ch in word.chars() {
+            ret.letters.push((ch, State::Absent));
+        }
+        ret
     }
 
     fn is_solved(&self) -> bool {
-        todo!();
+        if self.letters.is_empty() {
+            return false;
+        }
+
+        for (_, state) in &self.letters {
+            if *state != State::Correct {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -33,94 +85,206 @@ struct Wordle {
     used_chars: HashMap<char, State>,
     answer: String,
     history: Vec<Word>,
+    solved: bool,
 }
 
 impl Wordle {
     fn new() -> Self {
-        let words = Wordle::load_words();
-        let answer = Wordle::draw_word(&words);
+        let valid_words = Wordle::load_words().expect("failed to load words");
+        let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
+
+        let mut used_chars = HashMap::new();
+        for i in 'A'..='Z' {
+            used_chars.entry(i).or_insert(State::Unused);
+        }
+
         Wordle {
             round: 1,
-            valid_words: words,
-            used_chars: HashMap::new(),
+            valid_words,
+            used_chars,
             answer,
             history: Vec::new(),
+            solved: false,
         }
     }
 
-    fn load_words() -> HashSet<String> {
-        todo!();
+    fn load_words() -> Result<HashSet<String>> {
+        let file = File::open(FILE_PATH)?;
+        let reader: BufReader<File> = BufReader::new(file);
+
+        let mut string_set = HashSet::new();
+
+        for line in reader.lines() {
+            string_set.insert(line?.to_ascii_uppercase());
+        }
+
+        Ok(string_set)
     }
 
-    fn draw_word(words: &HashSet<String>) -> String {
-        todo!();
+    fn draw_word(words: &HashSet<String>) -> Option<String> {
+        if words.is_empty() {
+            panic!("Error: empty word set");
+        }
+
+        let mut rng = rand::rng();
+        words.iter().choose(&mut rng).cloned()
     }
 
-    fn parse_input(&self, input: &str) -> Result<[char; WORD_LEN], String> {
-        todo!();
+    fn parse_input(&self, input: &str) -> Result<Word> {
+        let trimmed_input = input.trim();
+
+        if !trimmed_input.is_ascii() {
+            return Err(anyhow!("not ascii"));
+        }
+
+        if trimmed_input.len() != WORD_LEN {
+            return Err(anyhow!("incorrect word length"));
+        }
+
+        if !self
+            .valid_words
+            .contains(&trimmed_input.to_ascii_uppercase())
+        {
+            return Err(anyhow!("invalid word"));
+        }
+
+        Ok(Word::from(&trimmed_input.to_ascii_uppercase()))
     }
 
-    fn compare(&self, user_input: &[char; WORD_LEN]) -> Word {
-        todo!();
+    fn compare(&self, user_input: &mut Word) {
+        let mut answer_map: HashMap<char, u8> = HashMap::new();
+        self.answer.chars().for_each(|c| {
+            *answer_map.entry(c).or_insert(0) += 1;
+        });
+
+        // check correct letters
+        let answer_vec: Vec<char> = self.answer.chars().collect();
+        for (i, (c, state)) in user_input.letters.iter_mut().enumerate() {
+            if answer_vec[i] == *c {
+                *state = State::Correct;
+                if let Some(val) = answer_map.get_mut(c) {
+                    *val -= 1;
+                }
+            }
+        }
+
+        // check present and absent letters
+        for (c, state) in user_input.letters.iter_mut() {
+            if *state == State::Correct {
+                continue;
+            }
+
+            match answer_map.get_mut(c) {
+                Some(val) if *val > 0 => {
+                    *state = State::Present;
+                    *val -= 1;
+                }
+                _ => *state = State::Absent,
+            }
+        }
     }
 
     fn update_status(&mut self, result: &Word) {
-        todo!();
+        self.history.push(result.clone());
+        let mut solved: bool = true;
+
+        // update keyboard
+        for (c, state) in result.letters.iter() {
+            if *state != State::Correct {
+                solved = false;
+            }
+
+            let used_state = self.used_chars.entry(*c).or_insert(State::Unused);
+            if *used_state == State::Unused
+                || (*used_state == State::Present && *state == State::Correct)
+            {
+                *used_state = *state;
+            }
+        }
+
+        // update status
+        self.solved = solved;
     }
 
     fn update_screen(&self) {
         // show previous guesses
-        todo!();
+        for word in &self.history {
+            println!("{}", word);
+        }
 
-        // show keyboard (print A to Z)
-        todo!();
+        let keyboard_layout = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+        for (row, chars) in keyboard_layout.iter().enumerate() {
+            for _ in 0..row {
+                print!(" ");
+            }
+            for ch in chars.to_string().chars() {
+                let state = self.used_chars.get(&ch).unwrap_or(&State::Unused);
+                match state {
+                    State::Correct => print!("{} ", ch.to_string().green()),
+                    State::Present => print!("{} ", ch.to_string().yellow()),
+                    State::Absent => print!("{} ", ch.to_string().white()),
+                    State::Unused => print!("{} ", ch.to_string().bright_black()),
+                }
+            }
+            println!()
+        }
+        println!();
+        io::stdout().flush().expect("failed to flush");
     }
 
-    fn is_solved(&self) -> bool {
-        todo!();
-    }
-
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<()> {
         while self.round <= ROUND {
+            println!("ROUND {}", self.round);
+            print!("> ");
+
             // take user input
-            let user_input = String::new();
+            io::stdout().flush().expect("failed to flush");
+            let mut user_input = String::new();
+            io::stdin().read_line(&mut user_input)?;
 
             // parsing
-            let guess = match self.parse_input(&user_input) {
-                Ok(g) => g,
+            let mut guess = match self.parse_input(&user_input) {
+                Ok(val) => val,
                 Err(e) => {
-                    println!("Error: {e}");
-                    continue; // restart current round
+                    eprintln!("{:#}", e);
+                    continue;
                 }
             };
 
             // compare
-            let result: Word = self.compare(&guess);
+            self.compare(&mut guess);
 
             // update game status
-            self.update_status(&result);
+            self.update_status(&guess);
 
             // update screen
             self.update_screen();
 
             self.round += 1;
 
-            if self.is_solved() {
+            if self.solved {
                 break;
             }
         }
 
-        if self.is_solved() {
+        if self.solved {
             println!("you got it right! '{}'", self.answer);
         } else {
             println!("you lose! answer: '{}'", self.answer);
         }
+
+        Ok(())
     }
 }
 
 fn main() {
     let mut game = Wordle::new();
-    game.run();
+
+    dbg!("log answer here: {}", &game.answer);
+
+    if let Err(e) = game.run() {
+        eprintln!("{:#}", e);
+    }
 }
 
 #[cfg(test)]
@@ -129,16 +293,16 @@ mod test {
 
     #[test]
     fn is_solved_test() {
-        let mut w = Word::new();
+        let mut w = Word::from("ARISE");
         assert!(!w.is_solved());
 
-        for state in &mut w.states {
+        for (_, state) in &mut w.letters {
             *state = State::Correct;
         }
-        w.states[3] = State::Present;
+        w.letters[3].1 = State::Present;
         assert!(!w.is_solved());
 
-        for state in &mut w.states {
+        for (_, state) in &mut w.letters {
             *state = State::Correct;
         }
         assert!(w.is_solved());
@@ -159,13 +323,13 @@ mod test {
             "a".to_string(),
             "test".to_string(),
         ]);
-        let result = Wordle::draw_word(&words);
+        let result = Wordle::draw_word(&words).expect("random word expected");
         assert!(words.contains(&result));
     }
 
     #[test]
     fn load_words_test() {
-        let words = Wordle::load_words();
+        let words = Wordle::load_words().expect("words expected");
         assert!(!words.is_empty());
 
         for word in &words {
@@ -178,29 +342,88 @@ mod test {
     fn compare_test() {
         let mut game = Wordle::new();
         game.answer = "CRATE".to_string();
-        let w = game.compare(&['C', 'A', 'T', 'E', 'R']);
-        assert!(w.states[0] == State::Correct);
-        assert!(w.states[1] == State::Present);
-        assert!(w.states[2] == State::Present);
-        assert!(w.states[3] == State::Present);
-        assert!(w.states[4] == State::Present);
+        let mut guess = Word::from("CATER");
+        game.compare(&mut guess);
+        assert_eq!(
+            guess
+                .letters
+                .into_iter()
+                .map(|(_, state)| state)
+                .collect::<Vec<State>>(),
+            vec![
+                State::Correct,
+                State::Present,
+                State::Present,
+                State::Present,
+                State::Present,
+            ]
+        );
 
         let mut game = Wordle::new();
         game.answer = "HOUND".to_string();
-        let w = game.compare(&['A', 'M', 'O', 'N', 'G']);
-        assert!(w.states[0] == State::Absent);
-        assert!(w.states[1] == State::Absent);
-        assert!(w.states[2] == State::Present);
-        assert!(w.states[3] == State::Correct);
-        assert!(w.states[4] == State::Absent);
+        let mut guess = Word::from("AMONG");
+        game.compare(&mut guess);
+        assert_eq!(
+            guess
+                .letters
+                .into_iter()
+                .map(|(_, state)| state)
+                .collect::<Vec<State>>(),
+            [
+                State::Absent,
+                State::Absent,
+                State::Present,
+                State::Correct,
+                State::Absent,
+            ]
+        );
+
+        let mut game = Wordle::new();
+        game.answer = "TRAIT".to_string();
+        let mut guess = Word::from("TXTXT");
+        game.compare(&mut guess);
+        assert_eq!(
+            guess
+                .letters
+                .into_iter()
+                .map(|(_, state)| state)
+                .collect::<Vec<State>>(),
+            [
+                State::Correct,
+                State::Absent,
+                State::Absent,
+                State::Absent,
+                State::Correct,
+            ]
+        );
+
+        let mut game = Wordle::new();
+        game.answer = "TRAIT".to_string();
+        let mut guess = Word::from("TXTTX");
+        game.compare(&mut guess);
+        assert_eq!(
+            guess
+                .letters
+                .into_iter()
+                .map(|(_, state)| state)
+                .collect::<Vec<State>>(),
+            [
+                State::Correct,
+                State::Absent,
+                State::Present,
+                State::Absent,
+                State::Absent,
+            ]
+        );
     }
 
     #[test]
     fn update_status_test() {
         let mut game = Wordle::new();
         game.answer = "DEALT".to_string();
-        let w = game.compare(&['A', 'S', 'I', 'D', 'E']);
-        game.update_status(&w);
+        let mut guess = Word::from("ASIDE");
+        game.compare(&mut guess);
+        game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'A' || ch == 'D' || ch == 'E' {
                 assert!(state == State::Present);
@@ -210,10 +433,11 @@ mod test {
                 assert!(state == State::Unused);
             }
         }
-        assert!(!game.is_solved());
+        assert!(!game.solved);
 
-        let w = game.compare(&['D', 'E', 'A', 'T', 'H']);
-        game.update_status(&w);
+        let mut guess = Word::from("DEATH");
+        game.compare(&mut guess);
+        game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'D' || ch == 'E' || ch == 'A' {
                 assert!(state == State::Correct);
@@ -225,10 +449,11 @@ mod test {
                 assert!(state == State::Unused);
             }
         }
-        assert!(!game.is_solved());
+        assert!(!game.solved);
 
-        let w = game.compare(&['D', 'E', 'A', 'L', 'T']);
-        game.update_status(&w);
+        let mut guess = Word::from("DEALT");
+        game.compare(&mut guess);
+        game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'D' || ch == 'E' || ch == 'A' || ch == 'L' || ch == 'T' {
                 assert!(state == State::Correct);
@@ -238,6 +463,6 @@ mod test {
                 assert!(state == State::Unused);
             }
         }
-        assert!(game.is_solved());
+        assert!(game.solved);
     }
 }
