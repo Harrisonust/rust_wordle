@@ -369,7 +369,7 @@ impl Wordle {
         let keyboard = Paragraph::new(lines).alignment(Alignment::Center);
         frame.render_widget(keyboard, keyboard_area);
 
-        if self.solved || self.round == ROUND {
+        if self.solved || self.round > ROUND {
             let game_result = if self.solved {
                 vec![
                     Span::styled(
@@ -418,7 +418,7 @@ impl Wordle {
     fn run(&mut self) -> Result<()> {
         let mut terminal = ratatui::init();
 
-        while self.round <= ROUND {
+        loop {
             terminal.draw(|frame| {
                 self.update_screen(frame);
             })?;
@@ -426,6 +426,10 @@ impl Wordle {
             match self.handle_input() {
                 InputState::Default => {}
                 InputState::Submit => {
+                    if self.round > 6 {
+                        continue;
+                    }
+
                     // parsing
                     let mut guess = match self.parse_input(&self.current) {
                         Ok(val) => {
