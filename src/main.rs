@@ -115,7 +115,7 @@ struct Wordle {
 impl Wordle {
     fn new() -> Self {
         let valid_words = Wordle::load_words().expect("failed to load words");
-        let answer = "ASIDE".to_string();
+        let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
 
         let mut used_chars = HashMap::new();
         for i in 'A'..='Z' {
