@@ -115,7 +115,7 @@ struct Wordle {
 impl Wordle {
     fn new() -> Self {
         let valid_words = Wordle::load_words().expect("failed to load words");
-        let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
+        let answer = "ASIDE".to_string();
 
         let mut used_chars = HashMap::new();
         for i in 'A'..='Z' {
@@ -160,17 +160,17 @@ impl Wordle {
         if let Ok(Event::Key(key)) = event::read() {
             match key.code {
                 KeyCode::Esc => return InputState::Cancel,
-                KeyCode::Char(ch) if self.round <= 6 => {
+                KeyCode::Char(ch) if self.round <= 6 && !self.solved => {
                     if self.current.len() < 5 {
                         self.current.push(ch.to_ascii_uppercase());
                     }
                 }
-                KeyCode::Backspace if self.round <= 6 => {
+                KeyCode::Backspace if self.round <= 6 && !self.solved => {
                     if !self.current.is_empty() {
                         self.current.pop();
                     }
                 }
-                KeyCode::Enter if self.round <= 6 => {
+                KeyCode::Enter if self.round <= 6 && !self.solved => {
                     return InputState::Submit;
                 }
                 _ => return InputState::GameEnd, // if round >= 6, ignore all input except esc
