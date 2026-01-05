@@ -156,10 +156,25 @@ impl Wordle {
         words.iter().choose(&mut rng).cloned()
     }
 
+    fn game_restart(&mut self) {
+        self.round = 1;
+        for (_, state) in self.used_chars.iter_mut() {
+            *state = State::Unused;
+        }
+        self.answer = Wordle::draw_word(&self.valid_words).expect("failed to draw word");
+        self.history = Vec::new();
+        self.current = String::new();
+        self.solved = false;
+        self.err_msg = String::new();
+    }
+
     fn handle_input(&mut self) -> InputState {
         if let Ok(Event::Key(key)) = event::read() {
             match key.code {
                 KeyCode::Esc => return InputState::Cancel,
+                KeyCode::Tab => {
+                    self.game_restart();
+                }
                 KeyCode::Char(ch) if self.round <= 6 && !self.solved => {
                     if self.current.len() < 5 {
                         self.current.push(ch.to_ascii_uppercase());
@@ -280,6 +295,8 @@ impl Wordle {
         let instructions = Line::from(vec![
             " Submit ".into(),
             "<Enter>".blue().bold(),
+            " New game ".into(),
+            "<Tab>".blue().bold(),
             " Quit ".into(),
             "<Esc>".blue().bold(),
         ]);
@@ -409,14 +426,18 @@ impl Wordle {
 
             let popup_area = frame
                 .area()
-                .centered(Constraint::Length(40), Constraint::Length(3));
+                .centered(Constraint::Length(40), Constraint::Length(4));
             frame.render_widget(Clear, popup_area);
 
-            let popup_para = Paragraph::new(vec![game_result.into()])
+            let new_game = vec![
+                Span::raw("New Game? "),
+                Span::styled("<Tab>", Style::default().blue().bold()),
+            ];
+            let popup = Paragraph::new(vec![game_result.into(), new_game.into()])
                 .block(Block::bordered())
                 .alignment(Alignment::Center);
 
-            frame.render_widget(popup_para, popup_area);
+            frame.render_widget(popup, popup_area);
         }
     }
 
