@@ -402,16 +402,13 @@ impl Wordle {
                 ]
             };
 
-            let popup_block = Block::bordered();
             let popup_area = frame
                 .area()
-                .centered(Constraint::Length(50), Constraint::Percentage(20));
+                .centered(Constraint::Length(40), Constraint::Percentage(20));
             frame.render_widget(Clear, popup_area);
 
-            let popup_text = vec![game_result.into()];
-
-            let popup_para = Paragraph::new(popup_text)
-                .block(popup_block)
+            let popup_para = Paragraph::new(vec![game_result.into()])
+                .block(Block::bordered())
                 .alignment(Alignment::Center);
 
             frame.render_widget(popup_para, popup_area);
