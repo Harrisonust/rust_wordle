@@ -272,8 +272,16 @@ impl Wordle {
             .areas(outer);
 
         /* border */
+        let instructions = Line::from(vec![
+            " Submit ".into(),
+            "<Enter>".blue().bold(),
+            " Quit ".into(),
+            "<Esc>".blue().bold(),
+        ]);
+
         Block::bordered()
             .title("Wordle")
+            .title_bottom(instructions.right_aligned())
             .border_type(BorderType::Rounded)
             .render(outer, frame.buffer_mut());
 
