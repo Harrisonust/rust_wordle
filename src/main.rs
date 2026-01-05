@@ -52,7 +52,7 @@ impl Tile {
 impl Widget for Tile {
     fn render(self, area: Rect, buf: &mut Buffer) {
         Block::new().bg(self.get_color()).render(area, buf);
-        Paragraph::new(format!("{}", self.letter)).render(
+        Paragraph::new(format!("{}", self.letter)).bold().render(
             area.centered(Constraint::Length(1), Constraint::Length(1)),
             buf,
         );
