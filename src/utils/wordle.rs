@@ -7,8 +7,10 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Clear, Paragraph, Widget, Wrap},
 };
+use regex::Regex;
+use reqwest::blocking;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -209,6 +211,10 @@ impl Wordle {
                     .centered(Constraint::Length(50), Constraint::Length(41)),
             );
 
+        let [inner] = Layout::vertical([Constraint::Fill(1)])
+            .margin(1)
+            .areas(outer);
+
         let [msg, top, bottom] = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
@@ -321,7 +327,7 @@ impl Wordle {
 
         if self.solved || self.round > ROUND {
             let game_result = if self.solved {
-                vec![
+                Line::from(vec![
                     Span::styled(
                         "You won! The answer is: ",
                         Style::default()
@@ -334,9 +340,9 @@ impl Wordle {
                             .add_modifier(Modifier::BOLD)
                             .fg(Color::White),
                     ),
-                ]
+                ])
             } else {
-                vec![
+                Line::from(vec![
                     Span::styled(
                         "You lost! The answer is: ",
                         Style::default()
@@ -349,24 +355,38 @@ impl Wordle {
                             .add_modifier(Modifier::BOLD)
                             .fg(Color::White),
                     ),
-                ]
+                ])
             };
 
-            let popup_area = frame
-                .area()
-                .centered(Constraint::Length(40), Constraint::Length(4));
-            frame.render_widget(Clear, popup_area);
+            frame.render_widget(Clear, inner);
 
-            let new_game = vec![
-                Span::raw("New Game? "),
-                Span::styled("<Tab>", Style::default().blue().bold()),
-            ];
-            let popup = Paragraph::new(vec![game_result.into(), new_game.into()])
+            let mut lines = vec![game_result, Line::from(Span::raw(""))];
+            if let Some(word_defs) = self.get_word_def(&self.answer) {
+                for def in word_defs {
+                    lines.push(Line::from(def));
+                }
+            } else {
+                lines.push(Line::from("Connect to the internet to get word definitions"));
+            }
+
+            let ending = Paragraph::new(lines)
                 .block(Block::bordered())
-                .alignment(Alignment::Center);
+                .wrap(Wrap { trim: true });
 
-            frame.render_widget(popup, popup_area);
+            frame.render_widget(ending, inner);
         }
+    }
+
+    fn get_word_def(&self, word: &String) -> Option<Vec<String>> {
+        let url = format!("https://api.dictionaryapi.dev/api/v2/entries/en/{}", word);
+        let content = blocking::get(url).ok()?.text().ok()?;
+
+        let re = Regex::new(r#""definition":"([^"]*)""#).ok()?;
+        let mut definition = vec![format!("\nDefinitions for '{}':\n", word)];
+        for cap in re.captures_iter(&content) {
+            definition.push("- ".to_string() + &cap[1]);
+        }
+        Some(definition)
     }
 
     pub fn run(&mut self) -> Result<()> {
