@@ -1,2 +1,3 @@
-pub mod word;
+mod ui;
+mod word;
 pub mod wordle;
