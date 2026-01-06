@@ -3,7 +3,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
     style::{Color, Stylize},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -26,7 +26,7 @@ impl Tile {
             TileState::Correct => Color::Green,
             TileState::Present => Color::LightYellow,
             TileState::Absent => Color::DarkGray,
-            TileState::Unused => Color::Gray,
+            TileState::Unused => Color::Rgb(65, 65, 65),
         }
     }
 }

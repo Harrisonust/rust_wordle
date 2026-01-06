@@ -52,7 +52,7 @@ impl Wordle {
             .areas(
                 frame
                     .area()
-                    .centered(Constraint::Length(50), Constraint::Length(41)),
+                    .centered(Constraint::Length(50), Constraint::Length(42)),
             );
 
         let [inner] = Layout::vertical([Constraint::Fill(1)])
@@ -63,8 +63,8 @@ impl Wordle {
             .direction(Direction::Vertical)
             .constraints(vec![
                 Constraint::Length(2),
-                Constraint::Length(25),
-                Constraint::Length(8),
+                Constraint::Length(28),
+                Constraint::Length(7),
             ])
             .margin(2)
             .areas(outer);
@@ -105,9 +105,27 @@ impl Wordle {
                 let area = Rect {
                     x: (center_x as i32 - width as i32 / 2
                         + ((col as i32 - 2) * (width + 2) as i32)) as u16,
-                    y: game_board_area.y + (row as i32 * (height + 1) as i32) as u16,
+                    y: game_board_area.y + 1 + (row as i32 * (height + 1) as i32) as u16,
                     width,
                     height,
+                };
+                tile.render(area, frame.buffer_mut());
+            }
+        }
+
+        // remaining spots
+        for row in (self.round - 1)..ROUND {
+            for col in 0..5 {
+                let area = Rect {
+                    x: (center_x as i32 - width as i32 / 2 + ((col - 2) * (width + 2) as i32))
+                        as u16,
+                    y: game_board_area.y + 1 + (row as i32 * (height + 1) as i32) as u16,
+                    width,
+                    height,
+                };
+                let tile = Tile {
+                    letter: ' ',
+                    state: TileState::Unused,
                 };
                 tile.render(area, frame.buffer_mut());
             }
@@ -118,7 +136,7 @@ impl Wordle {
             let area = Rect {
                 x: (center_x as i32 - width as i32 / 2 + ((col as i32 - 2) * (width + 2) as i32))
                     as u16,
-                y: game_board_area.y + (self.history.len() as i32 * (height + 1) as i32) as u16,
+                y: game_board_area.y + 1 + (self.history.len() as i32 * (height + 1) as i32) as u16,
                 width,
                 height,
             };
