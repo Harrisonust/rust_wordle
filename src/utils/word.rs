@@ -3,7 +3,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
     style::{Color, Stylize},
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{Block, Paragraph, Widget},
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -41,16 +41,14 @@ impl Widget for Tile {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Word {
     pub letters: Vec<Tile>,
 }
 
 impl Word {
     pub fn new() -> Self {
-        Word {
-            letters: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn from(word: &str) -> Self {

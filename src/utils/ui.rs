@@ -14,7 +14,7 @@ pub enum InputState {
     Guessing,
     Submit,
     Cancel,
-    GameEnd,
+    None,
 }
 
 impl Wordle {
@@ -25,23 +25,28 @@ impl Wordle {
                 KeyCode::Tab => {
                     self.game_restart();
                 }
-                KeyCode::Char(ch) if self.round <= 6 && !self.solved => {
+                KeyCode::Char('?') if self.end_game && !self.show_def => {
+                    self.show_def = true;
+                }
+                KeyCode::Char(ch) if self.round <= 6 && !self.end_game => {
                     if self.current.len() < 5 {
                         self.current.push(ch.to_ascii_uppercase());
                     }
+                    return InputState::Guessing;
                 }
-                KeyCode::Backspace if self.round <= 6 && !self.solved => {
+                KeyCode::Backspace if self.round <= 6 && !self.end_game => {
                     if !self.current.is_empty() {
                         self.current.pop();
                     }
+                    return InputState::Guessing;
                 }
-                KeyCode::Enter if self.round <= 6 && !self.solved => {
+                KeyCode::Enter if self.round <= 6 && !self.end_game => {
                     return InputState::Submit;
                 }
-                _ => return InputState::GameEnd, // if round >= 6, ignore all input except esc
+                _ => {}
             }
         }
-        InputState::Guessing
+        InputState::None
     }
 
     pub fn update_screen(&self, frame: &mut Frame) {
@@ -187,9 +192,10 @@ impl Wordle {
         let keyboard = Paragraph::new(lines).alignment(Alignment::Center);
         frame.render_widget(keyboard, keyboard_area);
 
-        if self.solved || self.round > ROUND {
-            let game_result = if self.solved {
-                Line::from(vec![
+        if self.end_game {
+            let mut game_result = Vec::new();
+            if self.solved {
+                game_result.push(Line::from(vec![
                     Span::styled(
                         "You won! The answer is: ",
                         Style::default()
@@ -202,9 +208,9 @@ impl Wordle {
                             .add_modifier(Modifier::BOLD)
                             .fg(Color::White),
                     ),
-                ])
+                ]));
             } else {
-                Line::from(vec![
+                game_result.push(Line::from(vec![
                     Span::styled(
                         "You lost! The answer is: ",
                         Style::default()
@@ -217,12 +223,21 @@ impl Wordle {
                             .add_modifier(Modifier::BOLD)
                             .fg(Color::White),
                     ),
-                ])
+                ]));
             };
 
+            game_result.push(Line::from(vec![
+                Span::raw("Show word definition? "),
+                Span::styled("<?>", Style::default().blue().bold()),
+            ]));
+
+            frame.render_widget(Paragraph::new(game_result), msg);
+        }
+
+        if self.show_def {
             frame.render_widget(Clear, inner);
 
-            let mut lines = vec![game_result, Line::from(Span::raw(""))];
+            let mut lines = Vec::new();
             if let Some(word_defs) = self.get_word_def(&self.answer) {
                 for def in word_defs {
                     lines.push(Line::from(def));

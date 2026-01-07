@@ -23,6 +23,8 @@ pub struct Wordle {
     pub current: String,
     pub solved: bool,
     pub err_msg: String,
+    pub show_def: bool,
+    pub end_game: bool,
 }
 
 impl Wordle {
@@ -44,6 +46,8 @@ impl Wordle {
             current: String::new(),
             solved: false,
             err_msg: String::new(),
+            end_game: false,
+            show_def: false,
         }
     }
 
@@ -76,9 +80,11 @@ impl Wordle {
         }
         self.answer = Wordle::draw_word(&self.valid_words).expect("failed to draw word");
         self.history = Vec::new();
-        self.current = String::new();
+        self.current.clear();
         self.solved = false;
-        self.err_msg = String::new();
+        self.err_msg.clear();
+        self.end_game = false;
+        self.show_def = false;
     }
 
     fn parse_input(&self, input: &str) -> Result<Word, String> {
@@ -110,6 +116,8 @@ impl Wordle {
 
         // check correct letters
         let answer_vec: Vec<char> = self.answer.chars().collect();
+
+        // First pass: mark correct letters
         for (i, tile) in user_input.letters.iter_mut().enumerate() {
             if answer_vec[i] == tile.letter {
                 tile.state = TileState::Correct;
@@ -119,7 +127,7 @@ impl Wordle {
             }
         }
 
-        // check present and absent letters
+        // Second pass: mark present and absent letters
         for tile in user_input.letters.iter_mut() {
             if tile.state == TileState::Correct {
                 continue;
@@ -137,7 +145,7 @@ impl Wordle {
 
     fn update_status(&mut self, result: &Word) {
         self.history.push(result.clone());
-        let mut solved: bool = true;
+        let mut solved = true;
 
         // update used chars
         for tile in result.letters.iter() {
@@ -205,7 +213,11 @@ impl Wordle {
                     self.current.clear();
                 }
                 InputState::Cancel => break,
-                InputState::Guessing | InputState::GameEnd => {}
+                InputState::Guessing | InputState::None => {}
+            }
+
+            if self.round > 6 || self.solved {
+                self.end_game = true;
             }
         }
         ratatui::restore();
