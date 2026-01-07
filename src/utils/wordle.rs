@@ -182,7 +182,7 @@ impl Wordle {
         loop {
             // render terminal output
             terminal.draw(|frame| {
-                self.update_screen(frame);
+                self.render_terminal(frame);
             })?;
 
             match self.handle_input() {
