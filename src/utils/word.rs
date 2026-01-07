@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
+pub const WORD_LEN: usize = 5;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TileState {
     Correct,
@@ -52,8 +54,8 @@ impl Word {
     }
 
     pub fn from(word: &str) -> Self {
-        if word.len() != 5 {
-            panic!("word should have length 5");
+        if word.len() != WORD_LEN {
+            panic!("{}", format!("word should have length {}", WORD_LEN));
         }
 
         let mut ret = Word::new();

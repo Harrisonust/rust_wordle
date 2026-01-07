@@ -6,13 +6,12 @@ use reqwest::blocking;
 use std::collections::{HashMap, HashSet};
 
 use super::ui::InputState;
-use super::word::{TileState, Word};
+use super::word::{TileState, Word, WORD_LEN};
 
-pub const ROUND: u8 = 6;
-const WORD_LEN: usize = 5;
+pub const ROUND: u8 = 6;// maximum 6 rounds
 
 pub struct Wordle {
-    pub round: u8, // maximum 6 rounds
+    pub round: u8,
     pub valid_words: HashSet<String>,
     pub used_chars: HashMap<char, TileState>,
     pub answer: String,
@@ -211,7 +210,7 @@ impl Wordle {
                 InputState::Guessing | InputState::None => {}
             }
 
-            if self.round > 6 || self.solved {
+            if self.round > ROUND || self.solved {
                 self.end_game = true;
             }
         }

@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Paragraph, Widget, Wrap},
 };
 
-use super::word::{Tile, TileState};
+use super::word::{Tile, TileState, WORD_LEN};
 use super::wordle::{ROUND, Wordle};
 
 pub enum InputState {
@@ -28,19 +28,19 @@ impl Wordle {
                 KeyCode::Char('?') if self.end_game && !self.show_def => {
                     self.show_def = true;
                 }
-                KeyCode::Char(ch) if self.round <= 6 && !self.end_game => {
-                    if self.current.len() < 5 {
+                KeyCode::Char(ch) if self.round <= ROUND && !self.end_game => {
+                    if self.current.len() < WORD_LEN {
                         self.current.push(ch.to_ascii_uppercase());
                     }
                     return InputState::Guessing;
                 }
-                KeyCode::Backspace if self.round <= 6 && !self.end_game => {
+                KeyCode::Backspace if self.round <= ROUND && !self.end_game => {
                     if !self.current.is_empty() {
                         self.current.pop();
                     }
                     return InputState::Guessing;
                 }
-                KeyCode::Enter if self.round <= 6 && !self.end_game => {
+                KeyCode::Enter if self.round <= ROUND && !self.end_game => {
                     return InputState::Submit;
                 }
                 _ => {}
@@ -120,9 +120,9 @@ impl Wordle {
 
         // remaining spots
         for row in (self.round - 1)..ROUND {
-            for col in 0..5 {
+            for col in 0..WORD_LEN {
                 let area = Rect {
-                    x: (center_x as i32 - width as i32 / 2 + ((col - 2) * (width + 2) as i32))
+                    x: (center_x as i32 - width as i32 / 2 + ((col as i32 - 2) * (width + 2) as i32))
                         as u16,
                     y: game_board_area.y + 1 + (row as i32 * (height + 1) as i32) as u16,
                     width,
