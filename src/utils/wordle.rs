@@ -4,15 +4,12 @@ use rand::seq::IteratorRandom;
 use regex::Regex;
 use reqwest::blocking;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 use super::ui::InputState;
 use super::word::{TileState, Word};
 
 pub const ROUND: u8 = 6;
 const WORD_LEN: usize = 5;
-const FILE_PATH: &str = "./words.txt";
 
 pub struct Wordle {
     pub round: u8, // maximum 6 rounds
@@ -52,16 +49,14 @@ impl Wordle {
     }
 
     fn load_words() -> Result<HashSet<String>> {
-        let file = File::open(FILE_PATH)?;
-        let reader: BufReader<File> = BufReader::new(file);
+        const WORDS: &str = include_str!("../../words.txt");
+        let words: Vec<&str> = WORDS.lines().collect();
 
-        let mut string_set = HashSet::new();
-
-        for line in reader.lines() {
-            string_set.insert(line?.to_ascii_uppercase());
-        }
-
-        Ok(string_set)
+        let mut result = HashSet::new();
+        words.iter().for_each(|w| {
+            result.insert(w.to_ascii_uppercase());
+        });
+        Ok(result)
     }
 
     fn draw_word(words: &HashSet<String>) -> Option<String> {
