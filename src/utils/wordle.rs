@@ -6,21 +6,23 @@ use reqwest::blocking;
 use std::collections::{HashMap, HashSet};
 
 use super::ui::InputState;
-use super::word::{TileState, Word, WORD_LEN};
+use super::word::{TileState, WORD_LEN, Word};
 
-pub const ROUND: u8 = 6;// maximum 6 rounds
+pub const ROUND: u8 = 6; // maximum 6 rounds
 
 pub struct Wordle {
     pub round: u8,
     pub valid_words: HashSet<String>,
     pub used_chars: HashMap<char, TileState>,
     pub answer: String,
-    pub history: Vec<Word>,
-    pub current: String,
-    pub solved: bool,
+    pub current_guess: String,
+    pub guess_history: Vec<Word>,
     pub err_msg: String,
-    pub show_def: bool,
-    pub end_game: bool,
+
+    /* control flow flags */
+    pub solved: bool,
+    pub show_word_def: bool,
+    pub is_game_over: bool,
 }
 
 impl Wordle {
@@ -29,8 +31,8 @@ impl Wordle {
         let answer = Wordle::draw_word(&valid_words).expect("failed to draw word");
 
         let mut used_chars = HashMap::new();
-        for i in 'A'..='Z' {
-            used_chars.entry(i).or_insert(TileState::Unused);
+        for ch in 'A'..='Z' {
+            used_chars.entry(ch).or_insert(TileState::Unused);
         }
 
         Wordle {
@@ -38,13 +40,27 @@ impl Wordle {
             valid_words,
             used_chars,
             answer,
-            history: Vec::new(),
-            current: String::new(),
-            solved: false,
+            current_guess: String::new(),
+            guess_history: Vec::new(),
             err_msg: String::new(),
-            end_game: false,
-            show_def: false,
+            solved: false,
+            is_game_over: false,
+            show_word_def: false,
         }
+    }
+
+    pub fn game_restart(&mut self) {
+        self.round = 1;
+        for (_, state) in self.used_chars.iter_mut() {
+            *state = TileState::Unused;
+        }
+        self.answer = Wordle::draw_word(&self.valid_words).expect("failed to draw word");
+        self.guess_history = Vec::new();
+        self.current_guess.clear();
+        self.solved = false;
+        self.err_msg.clear();
+        self.is_game_over = false;
+        self.show_word_def = false;
     }
 
     fn load_words() -> Result<HashSet<String>> {
@@ -52,8 +68,8 @@ impl Wordle {
         let words: Vec<&str> = WORDS.lines().collect();
 
         let mut result = HashSet::new();
-        words.iter().for_each(|w| {
-            result.insert(w.to_ascii_uppercase());
+        words.iter().for_each(|word| {
+            result.insert(word.to_ascii_uppercase());
         });
         Ok(result)
     }
@@ -67,43 +83,26 @@ impl Wordle {
         words.iter().choose(&mut rng).cloned()
     }
 
-    pub fn game_restart(&mut self) {
-        self.round = 1;
-        for (_, state) in self.used_chars.iter_mut() {
-            *state = TileState::Unused;
-        }
-        self.answer = Wordle::draw_word(&self.valid_words).expect("failed to draw word");
-        self.history = Vec::new();
-        self.current.clear();
-        self.solved = false;
-        self.err_msg.clear();
-        self.end_game = false;
-        self.show_def = false;
-    }
-
     fn parse_input(&self, input: &str) -> Result<Word, String> {
-        let trimmed_input = input.trim();
+        let input = input.trim();
 
-        if !trimmed_input.is_ascii() {
+        if !input.is_ascii() {
             return Err(String::from("not ascii"));
         }
 
-        if trimmed_input.len() != WORD_LEN {
+        if input.len() != WORD_LEN {
             return Err(String::from("incorrect word length"));
         }
 
-        if !self
-            .valid_words
-            .contains(&trimmed_input.to_ascii_uppercase())
-        {
+        if !self.valid_words.contains(&input.to_ascii_uppercase()) {
             return Err(String::from("invalid word"));
         }
 
-        Ok(Word::from(&trimmed_input.to_ascii_uppercase()))
+        Ok(Word::from(&input.to_ascii_uppercase()))
     }
 
-    fn compare(&self, user_input: &mut Word) {
-        let mut answer_map: HashMap<char, u8> = HashMap::new();
+    fn check_guess(&self, user_input: &mut Word) {
+        let mut answer_map = HashMap::new();
         self.answer.chars().for_each(|c| {
             *answer_map.entry(c).or_insert(0) += 1;
         });
@@ -137,12 +136,13 @@ impl Wordle {
         }
     }
 
-    fn update_status(&mut self, result: &Word) {
-        self.history.push(result.clone());
-        let mut solved = true;
+    fn update_status(&mut self, guess: &Word) {
+        // save guess into history
+        self.guess_history.push(guess.clone());
 
         // update used chars
-        for tile in result.letters.iter() {
+        let mut solved = true;
+        for tile in guess.letters.iter() {
             if tile.state != TileState::Correct {
                 solved = false;
             }
@@ -158,8 +158,10 @@ impl Wordle {
             }
         }
 
-        // update status
+        // update game status
         self.solved = solved;
+        self.round += 1;
+        self.current_guess.clear();
     }
 
     pub fn get_word_def(&self, word: &String) -> Option<Vec<String>> {
@@ -167,17 +169,18 @@ impl Wordle {
         let content = blocking::get(url).ok()?.text().ok()?;
 
         let re = Regex::new(r#""definition":"([^"]*)""#).ok()?;
-        let mut definition = vec![format!("\nDefinitions for '{}':\n", word)];
+        let mut definitions = vec![format!("Definitions for '{}':", word)];
         for cap in re.captures_iter(&content) {
-            definition.push("- ".to_string() + &cap[1]);
+            definitions.push("- ".to_string() + &cap[1]);
         }
-        Some(definition)
+        Some(definitions)
     }
 
     pub fn run(&mut self) -> Result<()> {
         let mut terminal = ratatui::init();
 
         loop {
+            // render terminal output
             terminal.draw(|frame| {
                 self.update_screen(frame);
             })?;
@@ -185,7 +188,7 @@ impl Wordle {
             match self.handle_input() {
                 InputState::Submit => {
                     // parsing
-                    let mut guess = match self.parse_input(&self.current) {
+                    let mut guess = match self.parse_input(&self.current_guess) {
                         Ok(val) => {
                             self.err_msg.clear();
                             val
@@ -196,22 +199,18 @@ impl Wordle {
                         }
                     };
 
-                    // compare
-                    self.compare(&mut guess);
+                    // compare guess to answer
+                    self.check_guess(&mut guess);
 
                     // update game status
                     self.update_status(&guess);
-
-                    self.round += 1;
-
-                    self.current.clear();
                 }
-                InputState::Cancel => break,
-                InputState::Guessing | InputState::None => {}
+                InputState::Quit => break,
+                InputState::EditingGuess | InputState::None => {}
             }
 
             if self.round > ROUND || self.solved {
-                self.end_game = true;
+                self.is_game_over = true;
             }
         }
         ratatui::restore();
@@ -259,7 +258,7 @@ mod test {
         let mut game = Wordle::new();
         game.answer = "CRATE".to_string();
         let mut guess = Word::from("CATER");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         assert_eq!(
             guess
                 .letters
@@ -278,7 +277,7 @@ mod test {
         let mut game = Wordle::new();
         game.answer = "HOUND".to_string();
         let mut guess = Word::from("AMONG");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         assert_eq!(
             guess
                 .letters
@@ -297,7 +296,7 @@ mod test {
         let mut game = Wordle::new();
         game.answer = "TRAIT".to_string();
         let mut guess = Word::from("TXTXT");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         assert_eq!(
             guess
                 .letters
@@ -316,7 +315,7 @@ mod test {
         let mut game = Wordle::new();
         game.answer = "TRAIT".to_string();
         let mut guess = Word::from("TXTTX");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         assert_eq!(
             guess
                 .letters
@@ -338,7 +337,7 @@ mod test {
         let mut game = Wordle::new();
         game.answer = "DEALT".to_string();
         let mut guess = Word::from("ASIDE");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'A' || ch == 'D' || ch == 'E' {
@@ -352,7 +351,7 @@ mod test {
         assert!(!game.solved);
 
         let mut guess = Word::from("DEATH");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'D' || ch == 'E' || ch == 'A' {
@@ -368,7 +367,7 @@ mod test {
         assert!(!game.solved);
 
         let mut guess = Word::from("DEALT");
-        game.compare(&mut guess);
+        game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
             if ch == 'D' || ch == 'E' || ch == 'A' || ch == 'L' || ch == 'T' {
