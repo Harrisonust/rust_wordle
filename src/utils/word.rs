@@ -26,7 +26,7 @@ impl Tile {
     pub fn get_color(&self) -> Color {
         match self.state {
             TileState::Correct => Color::Green,
-            TileState::Present => Color::LightYellow,
+            TileState::Present => Color::Yellow,
             TileState::Absent => Color::DarkGray,
             TileState::Unused => Color::Rgb(65, 65, 65), // very dark gray
         }
