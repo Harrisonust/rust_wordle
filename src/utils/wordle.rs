@@ -55,10 +55,10 @@ impl Wordle {
             *state = TileState::Unused;
         }
         self.answer = Wordle::draw_word(&self.valid_words).expect("failed to draw word");
-        self.guess_history = Vec::new();
         self.current_guess.clear();
-        self.solved = false;
+        self.guess_history = Vec::new();
         self.err_msg.clear();
+        self.solved = false;
         self.is_game_over = false;
         self.show_word_def = false;
     }
@@ -107,10 +107,8 @@ impl Wordle {
             *answer_map.entry(c).or_insert(0) += 1;
         });
 
-        // check correct letters
-        let answer_vec: Vec<char> = self.answer.chars().collect();
-
         // First pass: mark correct letters
+        let answer_vec: Vec<char> = self.answer.chars().collect();
         for (i, tile) in user_input.letters.iter_mut().enumerate() {
             if answer_vec[i] == tile.letter {
                 tile.state = TileState::Correct;
@@ -151,9 +149,8 @@ impl Wordle {
                 .used_chars
                 .entry(tile.letter)
                 .or_insert(TileState::Unused);
-            if *used_state == TileState::Unused
-                || (*used_state == TileState::Present && tile.state == TileState::Correct)
-            {
+            // states have priorities. The higher the priority, the smaller the value
+            if tile.state < *used_state {
                 *used_state = tile.state;
             }
         }
@@ -162,6 +159,9 @@ impl Wordle {
         self.solved = solved;
         self.round += 1;
         self.current_guess.clear();
+        if self.round > ROUND || self.solved {
+            self.is_game_over = true;
+        }
     }
 
     pub fn get_word_def(&self, word: &String) -> Option<Vec<String>> {
@@ -207,10 +207,6 @@ impl Wordle {
                 }
                 InputState::Quit => break,
                 InputState::EditingGuess | InputState::None => {}
-            }
-
-            if self.round > ROUND || self.solved {
-                self.is_game_over = true;
             }
         }
         ratatui::restore();
@@ -333,51 +329,181 @@ mod test {
     }
 
     #[test]
-    fn update_status_test() {
+    fn update_status_solved_test() {
         let mut game = Wordle::new();
         game.answer = "DEALT".to_string();
+        assert_eq!(game.guess_history.len(), 0);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 1 */
+        assert_eq!(game.round, 1);
         let mut guess = Word::from("ASIDE");
         game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
-            if ch == 'A' || ch == 'D' || ch == 'E' {
-                assert!(state == TileState::Present);
-            } else if ch == 'S' || ch == 'I' {
-                assert!(state == TileState::Absent);
-            } else {
-                assert!(state == TileState::Unused);
+            match ch {
+                'A' | 'D' | 'E' => assert_eq!(state, TileState::Present),
+                'I' | 'S' => assert_eq!(state, TileState::Absent),
+                _ => assert_eq!(state, TileState::Unused),
             }
         }
-        assert!(!game.solved);
+        assert_eq!(game.guess_history.len(), 1);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
 
+        /* round 2 */
+        assert_eq!(game.round, 2);
         let mut guess = Word::from("DEATH");
         game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
-            if ch == 'D' || ch == 'E' || ch == 'A' {
-                assert!(state == TileState::Correct);
-            } else if ch == 'T' {
-                assert!(state == TileState::Present);
-            } else if ch == 'H' || ch == 'S' || ch == 'I' {
-                assert!(state == TileState::Absent);
-            } else {
-                assert!(state == TileState::Unused);
+            match ch {
+                'A' | 'D' | 'E' => assert_eq!(state, TileState::Correct),
+                'T' => assert_eq!(state, TileState::Present),
+                'H' | 'I' | 'S' => assert_eq!(state, TileState::Absent),
+                _ => assert_eq!(state, TileState::Unused),
             }
         }
-        assert!(!game.solved);
+        assert_eq!(game.guess_history.len(), 2);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
 
+        /* round 3 */
+        assert_eq!(game.round, 3);
         let mut guess = Word::from("DEALT");
         game.check_guess(&mut guess);
         game.update_status(&guess);
         for (&ch, &state) in &game.used_chars {
-            if ch == 'D' || ch == 'E' || ch == 'A' || ch == 'L' || ch == 'T' {
-                assert!(state == TileState::Correct);
-            } else if ch == 'H' || ch == 'S' || ch == 'I' {
-                assert!(state == TileState::Absent);
-            } else {
-                assert!(state == TileState::Unused);
+            match ch {
+                'A' | 'D' | 'E' | 'L' | 'T' => assert_eq!(state, TileState::Correct),
+                'H' | 'I' | 'S' => assert_eq!(state, TileState::Absent),
+                _ => assert_eq!(state, TileState::Unused),
             }
         }
-        assert!(game.solved);
+        assert_eq!(game.guess_history.len(), 3);
+        assert_eq!(game.solved, true);
+        assert_eq!(game.is_game_over, true);
+        assert_eq!(game.round, 4);
+    }
+
+    #[test]
+    fn update_status_unsolved_test() {
+        let mut game = Wordle::new();
+        game.answer = "EPOCH".to_string();
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+        assert_eq!(game.guess_history.len(), 0);
+
+        /* round 1 */
+        assert_eq!(game.round, 1);
+        let mut guess = Word::from("BAGEL");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'E' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'G' | 'L' => assert_eq!(state, TileState::Absent),
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+        assert_eq!(game.guess_history.len(), 1);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 2 */
+        assert_eq!(game.round, 2);
+        let mut guess = Word::from("ROUND");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'E' | 'O' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'D' | 'G' | 'L' | 'N' | 'R' | 'U' => {
+                    assert_eq!(state, TileState::Absent)
+                }
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+        assert_eq!(game.guess_history.len(), 2);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 3 */
+        assert_eq!(game.round, 3);
+        let mut guess = Word::from("MOUNT");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'E' | 'O' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'D' | 'G' | 'L' | 'M' | 'N' | 'R' | 'T' | 'U' => {
+                    assert_eq!(state, TileState::Absent)
+                }
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+        assert_eq!(game.guess_history.len(), 3);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 4 */
+        assert_eq!(game.round, 4);
+        let mut guess = Word::from("CRACK");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'C' => assert_eq!(state, TileState::Correct),
+                'E' | 'O' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'D' | 'G' | 'K' | 'L' | 'M' | 'N' | 'R' | 'T' | 'U' => {
+                    assert_eq!(state, TileState::Absent)
+                }
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+        assert_eq!(game.guess_history.len(), 4);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 5 */
+        assert_eq!(game.round, 5);
+        let mut guess = Word::from("SOLVE");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'C' => assert_eq!(state, TileState::Correct),
+                'E' | 'O' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'D' | 'G' | 'K' | 'L' | 'M' | 'N' | 'R' | 'S' | 'T' | 'U' | 'V' => {
+                    assert_eq!(state, TileState::Absent)
+                }
+
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+        assert_eq!(game.guess_history.len(), 5);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, false);
+
+        /* round 6 */
+        assert_eq!(game.round, 6);
+        let mut guess = Word::from("SOLVE");
+        game.check_guess(&mut guess);
+        game.update_status(&guess);
+        for (&ch, &state) in &game.used_chars {
+            match ch {
+                'C' => assert_eq!(state, TileState::Correct),
+                'E' | 'O' => assert_eq!(state, TileState::Present),
+                'A' | 'B' | 'D' | 'G' | 'K' | 'L' | 'M' | 'N' | 'R' | 'S' | 'T' | 'U' | 'V' => {
+                    assert_eq!(state, TileState::Absent)
+                }
+                _ => assert_eq!(state, TileState::Unused),
+            }
+        }
+
+        assert_eq!(game.guess_history.len(), 6);
+        assert_eq!(game.solved, false);
+        assert_eq!(game.is_game_over, true);
     }
 }

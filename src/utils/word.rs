@@ -8,7 +8,7 @@ use ratatui::{
 
 pub const WORD_LEN: usize = 5;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum TileState {
     Correct,
     Present,
