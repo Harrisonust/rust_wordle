@@ -72,16 +72,16 @@ impl Wordle {
                 Constraint::Length(28),
                 Constraint::Length(7),
             ])
-            .margin(2)
-            .areas(outer_area);
+            .margin(1)
+            .areas(inner_area);
 
         self.render_border(outer_area, frame.buffer_mut());
-        self.render_system_message(msg_area, frame.buffer_mut());
-        self.render_game_board(top_area, frame.buffer_mut());
-        self.render_keyboard(bottom_area, frame.buffer_mut());
-
         if self.show_word_def {
             self.render_definition_page(inner_area, frame.buffer_mut());
+        } else {
+            self.render_system_message(msg_area, frame.buffer_mut());
+            self.render_game_board(top_area, frame.buffer_mut());
+            self.render_keyboard(bottom_area, frame.buffer_mut());
         }
     }
 
