@@ -8,7 +8,8 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Paragraph, Widget, Wrap},
 };
 
-use super::word::{Tile, TileState, WORD_LEN};
+use super::tile::{Tile, TileState};
+use super::word::WORD_LEN;
 use super::wordle::{ROUND, Wordle};
 
 pub enum InputState {

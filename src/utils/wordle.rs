@@ -5,8 +5,9 @@ use regex::Regex;
 use reqwest::blocking;
 use std::collections::{HashMap, HashSet};
 
+use super::tile::TileState;
 use super::ui::InputState;
-use super::word::{TileState, WORD_LEN, Word};
+use super::word::{WORD_LEN, Word};
 
 pub const ROUND: u8 = 6; // maximum 6 rounds
 
